@@ -19,6 +19,7 @@ export const BIDDER_STATUSES = ["none", "assigned", "bidding"] as const;
 const profileSql = `
   select p.id, p.full_name, p.email, p.phone, p.linkedin_url, p.notes,
          p.created_by, p.created_at, p.updated_at,
+         p.for_job, p.for_ai_training,
          p.bidder_id, p.bidder_status,
          (select json_build_object(
             'user_id', b.id,
@@ -99,6 +100,10 @@ const profileBody = z.object({
   linkedin_url: z.string().trim().url("must be a full URL").max(300).or(z.literal("")).default(""),
   notes: z.string().trim().max(2000).default(""),
   assignee_ids: z.array(z.number().int()).max(50).default([]),
+  /* What the profile is used for. A profile is normally both, so these
+     default to true; clearing for_ai_training takes it off that board. */
+  for_job: z.boolean().default(true),
+  for_ai_training: z.boolean().default(true),
   // null clears the bidder; omitted leaves it alone.
   bidder_id: z.number().int().nullable().optional(),
   bidder_status: z.enum(BIDDER_STATUSES).optional(),
@@ -124,13 +129,14 @@ profiles.post(
     const b = profileBody.parse(req.body);
     const { rows } = await pool.query(
       `insert into profiles (full_name, email, phone, linkedin_url, notes, created_by,
-                             bidder_id, bidder_status)
-       values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`,
+                             bidder_id, bidder_status, for_job, for_ai_training)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
       [
         b.full_name, b.email, b.phone, b.linkedin_url, b.notes, actor.id,
         b.bidder_id ?? null,
         // Naming a bidder without a status means the work is assigned.
         b.bidder_status ?? (b.bidder_id ? "assigned" : "none"),
+        b.for_job, b.for_ai_training,
       ],
     );
     const id = rows[0].id as number;
@@ -158,6 +164,8 @@ profiles.patch(
          notes = coalesce($6, notes),
          bidder_id = case when $7::boolean then $8::int else bidder_id end,
          bidder_status = coalesce($9, bidder_status),
+         for_job = coalesce($10::boolean, for_job),
+         for_ai_training = coalesce($11::boolean, for_ai_training),
          updated_at = now()
        where id = $1`,
       [
@@ -168,6 +176,8 @@ profiles.patch(
         "bidder_id" in b,
         b.bidder_id ?? null,
         b.bidder_status ?? null,
+        b.for_job ?? null,
+        b.for_ai_training ?? null,
       ],
     );
     if (b.assignee_ids) await setAssignees(id, b.assignee_ids, actor.id);
@@ -407,7 +417,9 @@ profiles.get(
       pool.query(
         "select id, name, url, summary, icon_url from training_sites where active order by sort_order, name",
       ),
-      pool.query("select id, full_name from profiles order by full_name"),
+      /* Only profiles actually used for AI training. One not marked for it
+         would otherwise be a permanently empty column on the board. */
+      pool.query("select id, full_name from profiles where for_ai_training order by full_name"),
       pool.query(
         `select ta.id, ta.profile_id, ta.site_id, ta.status, ta.account_email, ta.note, ta.updated_at
          from training_accounts ta`,

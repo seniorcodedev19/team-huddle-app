@@ -1915,6 +1915,9 @@ textarea { width: 100%; min-height: 80px; resize: vertical; line-height: 1.5; }
   white-space: nowrap;
 }
 .profile-card header .btn { flex-shrink: 0; }
+/* Sits between the name and the edit button. The name takes the slack and
+   ellipsises, so a long one never squeezes the chip into unreadability. */
+.profile-card header .chip { flex: none; }
 
 .profile-fields { margin: 0; display: grid; gap: 5px; }
 .profile-fields > div { display: flex; gap: 8px; font-size: 13px; }
@@ -1968,8 +1971,13 @@ textarea { width: 100%; min-height: 80px; resize: vertical; line-height: 1.5; }
    sheet is portalled to <body> and repositions on capture-phase scroll, so
    it is not clipped by this container. */
 .profile-accounts {
-  display: grid; gap: 6px; align-content: start;
-  max-height: 232px; overflow-y: auto; overflow-x: hidden;
+  /* Chips wrap in rows rather than stacking one full-width row per site, so
+     a profile with several sites stays short. .chips supplies the flex. */
+  gap: 5px; align-content: start;
+  /* Five rows: 5 chips at 24px plus 4 gaps at 5px. Anything past that
+     scrolls, so a profile with fourteen sites does not make its card twice
+     the height of its neighbours. */
+  max-height: 140px; overflow-y: auto; overflow-x: hidden;
   /* Room for the scrollbar so it doesn't sit on top of the remove buttons. */
   padding-right: 4px;
 }
@@ -2328,9 +2336,14 @@ button.chip.toggle:focus-visible { outline: none; box-shadow: 0 0 0 2.5px var(--
 .dd-dot.tone-danger { background: var(--danger); }
 .dd-dot.tone-neutral { background: var(--accent); }
 .dd-dot.tone-muted { background: var(--muted); }
+/* Matches .chip.status-violet, used for the AI-training profile use. */
+.dd-dot.tone-violet { background: var(--s3); }
 
 /* Assignee picker: a select to add, removable pills for what's chosen. */
 .profiles-assignee .dd { min-width: 180px; }
+/* Narrower than the assignee filter: its longest option is "AI training". */
+.profiles-use .dd { min-width: 140px; }
+
 .assignee-picker { display: grid; gap: 9px; }
 .assignee-picker .dd { max-width: 320px; }
 
@@ -2840,3 +2853,163 @@ button.chip.toggle:focus-visible { outline: none; box-shadow: 0 0 0 2.5px var(--
   .wrp-panel { width: min(320px, calc(100vw - 16px)); }
   .wrp-panel .wrp-month + .wrp-month { display: none; }
 }
+
+/* ---------- profile: what it is used for ---------- */
+/* Shaped like the inputs either side of it: same background, border, radius
+   and height, so a row of Phone / Used for / LinkedIn reads as one row of
+   fields rather than a box wedged between two inputs. The switches sit
+   inside where an input's text would be. */
+.purpose {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  width: 100%;
+  /* Matches a sibling input's measured height, so the three fields in the
+     row line up top and bottom. */
+  min-height: 41px;
+  margin: 0;
+  padding: 4px 12px;
+  background: var(--field);
+  border: 1px solid var(--field-line);
+  border-radius: var(--r-md);
+}
+/* Focus is shown on the switches themselves, but a ring on the group keeps
+   it consistent with a focused input beside it. */
+.purpose:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2.5px var(--accent-ring);
+}
+.purpose-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+/* The shared label rule makes labels block-level and spaced; beside a switch
+   they sit inline, and clicking them toggles it. */
+.purpose-opt label {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+/* ---------- profile card: AI training as chips ---------- */
+/* "Site: Status", the same format the list view uses, instead of a stack of
+   full-width dropdown rows. Read-only: statuses are set on the AI Training
+   board, so the chip only carries the x that removes the account. */
+.account-chip {
+  gap: 3px;
+  padding: 2px 3px 2px 9px;
+  max-width: 100%;
+}
+.account-chip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Scaled to the chip, and inheriting its tint instead of the grey default. */
+.account-chip .account-remove {
+  width: 17px; height: 17px;
+  color: inherit; opacity: 0.55;
+  border-radius: 999px;
+}
+.account-chip .account-remove:hover:not(:disabled) {
+  opacity: 1;
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+.account-chip .account-remove:focus-visible {
+  outline: none;
+  opacity: 1;
+  box-shadow: 0 0 0 2px var(--accent-ring);
+}
+
+/* Explains a control that is disabled on purpose, so it does not read as
+   broken. Sits under the field it belongs to. */
+.field-hint { margin: 5px 0 0; line-height: 1.4; }
+
+/* Phone, Used for, LinkedIn: a 3/3/6 split of a twelve-column row. The two
+   short fields share the left half, the URL takes the right. */
+.profile-row3 {
+  display: grid;
+  grid-template-columns: 3fr 3fr 6fr;
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 800px) {
+  .profile-row3 { grid-template-columns: 1fr; }
+}
+
+/* Assigned-to and Bidder as labelled rows, matching .profile-fields above.
+   They used to share one unlabelled row of pills, which read wrong when the
+   same person was both the assignee and the bidder. */
+.profile-people { margin: 10px 0 0; display: grid; gap: 6px; }
+.profile-people > div { display: flex; gap: 8px; font-size: 13px; align-items: flex-start; }
+.profile-people dt { color: var(--muted); min-width: 64px; flex-shrink: 0; padding-top: 3px; }
+.profile-people dd {
+  margin: 0; min-width: 0;
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+}
+/* The row's label already says "Bidder", so the pill need not repeat it. */
+.profile-people .bidder-tag { margin: 0; }
+
+/* ---------- collapsible sidebar ---------- */
+/* The collapsed state lives on <html data-nav="off"> rather than in a class
+   on the shell, so the pre-paint script can set it before React renders and
+   a collapsed sidebar never flashes open on load. */
+html[data-nav="off"] .shell { grid-template-columns: 0 minmax(0, 1fr); }
+html[data-nav="off"] .side {
+  /* Clipped rather than display:none so it can slide. The grid column is 0
+     but the sidebar's own padding and border still gave it width, pushing a
+     sliver past the edge, so those go to zero too. */
+  visibility: hidden;
+  opacity: 0;
+  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  border-right: 0;
+}
+.shell { transition: grid-template-columns 0.18s ease; }
+.side { overflow-x: hidden; transition: opacity 0.14s ease; }
+
+/* Pinned to the viewport so it stays reachable whichever state it is in and
+   however far the page is scrolled. */
+.nav-collapse {
+  position: fixed;
+  top: 14px;
+  left: 236px;
+  z-index: 30;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 46px;
+  padding: 0;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  /* Flat against the sidebar edge, rounded on the side facing the content. */
+  border-left: 0;
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  cursor: pointer;
+  transition: left 0.18s ease, color 0.14s ease, background 0.14s ease;
+}
+.nav-collapse:hover { color: var(--ink); background: var(--raise); }
+.nav-collapse:focus-visible { outline: none; box-shadow: 0 0 0 2.5px var(--accent-ring); }
+html[data-nav="off"] .nav-collapse { left: 0; }
+
+@media (max-width: 860px) {
+  /* The drawer and its hamburger already do this below 860px. */
+  .nav-collapse { display: none; }
+  /* The collapse rules above apply to .side wherever it lives, and below
+     860px it lives inside the drawer — so someone who collapsed on desktop
+     and then opened the site on a phone got an empty drawer. The preference
+     is a desktop one; undo it entirely at this width. */
+  html[data-nav="off"] .side {
+    visibility: visible;
+    opacity: 1;
+    width: auto;
+    padding: 18px 12px 16px;
+    border-right: 1px solid var(--line);
+  }
+}
+
+/* A breakdown of what the filters left, under the toolbar. Job and AI
+   training overlap by design, so the figures do not sum to the total. */
+.profiles-counts { margin: -2px 0 12px; }

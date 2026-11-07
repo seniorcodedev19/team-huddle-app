@@ -285,6 +285,10 @@ export interface TeamProfile {
   created_by: number | null;
   created_at: string;
   updated_at: string;
+  /* What the profile is used for. A profile is usually both; one not marked
+     for AI training is left off that board entirely. */
+  for_job: boolean;
+  for_ai_training: boolean;
   assignees: ProfileAssignee[];
   accounts: TrainingAccount[];
   /** The bidder working this profile, if one is assigned. */

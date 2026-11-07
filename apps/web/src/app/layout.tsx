@@ -12,7 +12,7 @@ import MobileNav from "@/components/MobileNav";
 import Nav from "@/components/Nav";
 import ThemeToggle from "@/components/ThemeToggle";
 import { tryFetch } from "@/lib/api";
-import { themeScript } from "@/lib/theme-script";
+import { navScript, themeScript } from "@/lib/theme-script";
 import type { User } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Team Huddle", description: "Weekly team reviews and collaboration" };
@@ -32,6 +32,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         <Script id="theme-init" strategy="beforeInteractive">
           {themeScript}
+        </Script>
+        <Script id="nav-init" strategy="beforeInteractive">
+          {navScript}
         </Script>
         <Suspense fallback={null}>
           <BusyShell>

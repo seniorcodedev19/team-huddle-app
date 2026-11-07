@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { Logo } from "./Icons";
 
 /* The sidebar as a phone drawer.
@@ -15,6 +15,36 @@ import { Logo } from "./Icons";
    the sidebar itself is still rendered by Nav. */
 export default function MobileNav({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+
+  /* The desktop sidebar's collapsed state. The attribute on <html> is the
+     source of truth, not React: the pre-paint script in layout sets it
+     before first render so a collapsed sidebar never flashes open. This
+     subscribes to that attribute rather than mirroring it in state, which
+     also keeps the server and client renders agreeing. Separate from
+     `open`, which is the phone drawer. */
+  const subscribe = useCallback((onChange: () => void) => {
+    const ob = new MutationObserver(onChange);
+    ob.observe(document.documentElement, { attributes: true, attributeFilter: ["data-nav"] });
+    return () => ob.disconnect();
+  }, []);
+  const collapsed = useSyncExternalStore(
+    subscribe,
+    () => document.documentElement.getAttribute("data-nav") === "off",
+    // The server has no sidebar preference; it renders the expanded default.
+    () => false,
+  );
+
+  const toggleSidebar = () => {
+    const root = document.documentElement;
+    const next = !collapsed;
+    if (next) root.setAttribute("data-nav", "off");
+    else root.removeAttribute("data-nav");
+    try {
+      localStorage.setItem("nav", next ? "off" : "on");
+    } catch {
+      // A blocked localStorage only costs the preference, not the toggle.
+    }
+  };
 
   /* Following a link closes the drawer — otherwise it covers the page you
      just asked for. Caught here rather than watching the path, so the drawer
@@ -67,6 +97,21 @@ export default function MobileNav({ children }: { children: React.ReactNode }) {
           </span>
         </span>
       </header>
+
+      {/* Collapses the desktop sidebar. Hidden on phones, where the drawer
+          and its hamburger already do this job. */}
+      <button
+        type="button"
+        className="nav-collapse"
+        aria-label={collapsed ? "Show sidebar" : "Hide sidebar"}
+        aria-expanded={!collapsed}
+        title={collapsed ? "Show sidebar" : "Hide sidebar"}
+        onClick={toggleSidebar}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d={collapsed ? "m9 6 6 6-6 6" : "m15 6-6 6 6 6"} />
+        </svg>
+      </button>
 
       {/* Sits above the content, below the drawer; clicking it closes. */}
       {open && (
