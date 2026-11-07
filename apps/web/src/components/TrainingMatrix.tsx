@@ -7,7 +7,8 @@ import TrainingKanban from "./TrainingKanban";
 import AddSiteInline from "./AddSiteInline";
 import SiteLogo from "./SiteLogo";
 import Dropdown from "./Dropdown";
-import type { TrainingMatrix as Matrix, TrainingStatus } from "@/lib/types";
+import Avatar from "./Avatar";
+import type { ProfileAssignee, TrainingMatrix as Matrix, TrainingStatus } from "@/lib/types";
 
 type View = "table" | "kanban" | "cards";
 
@@ -25,6 +26,22 @@ function hostOf(url: string): string {
 export default function TrainingMatrix({ matrix }: { matrix: Matrix }) {
   const { error, busy, run } = useAction();
   const [view, setView] = useState<View>("table");
+
+  /* Board filters. They live here rather than in TrainingKanban so their
+     controls can sit in the toolbar beside Add site; the board receives the
+     values. 0 means "no filter" on each. */
+  const [fProfile, setFProfile] = useState(0);
+  const [fSite, setFSite] = useState(0);
+  const [fAssignee, setFAssignee] = useState(0);
+  const anyFilter = fProfile !== 0 || fSite !== 0 || fAssignee !== 0;
+
+  /* Only people actually assigned to a training profile: offering every
+     user would mostly list options that match nothing. */
+  const assigneeOptions = useMemo(() => {
+    const seen = new Map<number, ProfileAssignee>();
+    for (const p of matrix.profiles) for (const a of p.assignees ?? []) seen.set(a.user_id, a);
+    return [...seen.values()].sort((x, y) => x.name.localeCompare(y.name));
+  }, [matrix.profiles]);
 
   // (profile_id, site_id) -> status, for O(1) cell lookup.
   const cells = useMemo(() => {
@@ -103,11 +120,71 @@ export default function TrainingMatrix({ matrix }: { matrix: Matrix }) {
             Cards
           </button>
         </div>
-        <AddSiteInline modal />
+        {/* Board filters sit with the view switch and Add site, so the
+            toolbar holds every control for the page. Only the board uses
+            them, so they appear only on it. */}
+        {view === "kanban" && (
+          <>
+            <Dropdown<number>
+              value={fProfile}
+              ariaLabel="Filter by profile"
+              onChange={setFProfile}
+              options={[
+                { value: 0, label: "All profiles" },
+                ...matrix.profiles.map((p) => ({ value: p.id, label: p.full_name })),
+              ]}
+            />
+            <Dropdown<number>
+              value={fSite}
+              ariaLabel="Filter by training site"
+              onChange={setFSite}
+              options={[
+                { value: 0, label: "All sites" },
+                ...matrix.sites.map((x) => ({
+                  value: x.id,
+                  label: x.name,
+                  media: <SiteLogo name={x.name} iconUrl={x.icon_url} siteUrl={x.url} size={18} />,
+                })),
+              ]}
+            />
+            <Dropdown<number>
+              value={fAssignee}
+              ariaLabel="Filter by assignee"
+              onChange={setFAssignee}
+              options={[
+                { value: 0, label: "All assignees" },
+                ...assigneeOptions.map((a) => ({
+                  value: a.user_id,
+                  label: a.name,
+                  media: <Avatar name={a.name} email={a.email} src={a.avatar} size={20} />,
+                })),
+              ]}
+            />
+            {anyFilter && (
+              <button
+                className="btn secondary small"
+                type="button"
+                onClick={() => {
+                  setFProfile(0);
+                  setFSite(0);
+                  setFAssignee(0);
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </>
+        )}
+        <span className="bar-end">
+          <AddSiteInline modal />
+        </span>
       </div>
 
       {view === "kanban" ? (
-        <TrainingKanban matrix={matrix} />
+        <TrainingKanban
+          matrix={matrix}
+          filters={{ profileId: fProfile, siteId: fSite, assignee: fAssignee }}
+        />
       ) : view === "table" ? (
         <div className="panel" style={{ padding: 0, overflowX: "auto" }}>
           <table className="matrix">

@@ -418,8 +418,24 @@ profiles.get(
         "select id, name, url, summary, icon_url from training_sites where active order by sort_order, name",
       ),
       /* Only profiles actually used for AI training. One not marked for it
-         would otherwise be a permanently empty column on the board. */
-      pool.query("select id, full_name from profiles where for_ai_training order by full_name"),
+         would otherwise be a permanently empty column on the board.
+
+         Assignees come along so the board can filter by who owns a profile;
+         folded into JSON here rather than fetched per profile. */
+      pool.query(
+        `select p.id, p.full_name,
+                coalesce(
+                  (select json_agg(json_build_object(
+                     'user_id', u.id,
+                     'name', coalesce(nullif(u.name,''), u.email),
+                     'email', u.email,
+                     'avatar', u.avatar
+                   ) order by coalesce(nullif(u.name,''), u.email))
+                   from profile_assignees pa join users u on u.id = pa.user_id
+                   where pa.profile_id = p.id),
+                  '[]'::json) as assignees
+         from profiles p where p.for_ai_training order by p.full_name`,
+      ),
       pool.query(
         `select ta.id, ta.profile_id, ta.site_id, ta.status, ta.account_email, ta.note, ta.updated_at
          from training_accounts ta`,

@@ -3013,3 +3013,12 @@ html[data-nav="off"] .nav-collapse { left: 0; }
 /* A breakdown of what the filters left, under the toolbar. Job and AI
    training overlap by design, so the figures do not sum to the total. */
 .profiles-counts { margin: -2px 0 12px; }
+
+/* Board filters live in .profiles-bar beside the view switch and Add site.
+   Narrower than a standalone filter so three of them plus the switch and
+   the button still fit on one line. */
+.profiles-bar .dd { min-width: 150px; }
+/* Add site stays at the far end however many filters precede it. Named
+   rather than :last-child, which would also catch the last control of any
+   other .profiles-bar on the site. */
+.profiles-bar .bar-end { margin-left: auto; }

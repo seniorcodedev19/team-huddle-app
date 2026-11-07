@@ -10,6 +10,8 @@ import type { TrainingMatrix as Matrix, TrainingStatus } from "@/lib/types";
 type Card = {
   profileId: number;
   profileName: string;
+  /** Who owns the profile, for the assignee filter. */
+  assigneeIds: number[];
   siteId: number;
   siteName: string;
   siteIcon: string;
@@ -19,13 +21,26 @@ type Card = {
 
 /* Status board: one column per status, one card per (profile, site) account.
    Dragging a card onto a column moves that account to that status. */
-export default function TrainingKanban({ matrix }: { matrix: Matrix }) {
+export default function TrainingKanban({
+  matrix,
+  filters,
+}: {
+  matrix: Matrix;
+  /* The toolbar owns these so its controls can sit beside Add site. 0 on
+     any of them means "no filter". */
+  filters: { profileId: number; siteId: number; assignee: number };
+}) {
   const { error, busy, run } = useAction();
   const [dragging, setDragging] = useState<Card | null>(null);
   const [over, setOver] = useState<TrainingStatus | null>(null);
+  const { profileId, siteId, assignee } = filters;
 
   const profileName = useMemo(
     () => new Map(matrix.profiles.map((p) => [p.id, p.full_name])),
+    [matrix.profiles],
+  );
+  const assigneesOf = useMemo(
+    () => new Map(matrix.profiles.map((p) => [p.id, p.assignees ?? []])),
     [matrix.profiles],
   );
   const siteById = useMemo(() => new Map(matrix.sites.map((s) => [s.id, s])), [matrix.sites]);
@@ -35,13 +50,28 @@ export default function TrainingKanban({ matrix }: { matrix: Matrix }) {
       matrix.accounts.map((a) => ({
         profileId: a.profile_id,
         profileName: profileName.get(a.profile_id) ?? "Unknown profile",
+        assigneeIds: (assigneesOf.get(a.profile_id) ?? []).map((x) => x.user_id),
         siteId: a.site_id,
         siteName: siteById.get(a.site_id)?.name ?? "Unknown site",
         siteIcon: siteById.get(a.site_id)?.icon_url ?? "",
         siteUrl: siteById.get(a.site_id)?.url ?? "",
         status: a.status,
       })),
-    [matrix.accounts, profileName, siteById],
+    [matrix.accounts, profileName, assigneesOf, siteById],
+  );
+
+  /* The cards the filters leave. Columns still render when empty, so the
+     board keeps its shape and a status with no matches reads as zero
+     rather than disappearing. */
+  const shown = useMemo(
+    () =>
+      cards.filter((c) => {
+        if (profileId && c.profileId !== profileId) return false;
+        if (siteId && c.siteId !== siteId) return false;
+        if (assignee && !c.assigneeIds.includes(assignee)) return false;
+        return true;
+      }),
+    [cards, profileId, siteId, assignee],
   );
 
   const move = (card: Card, status: TrainingStatus) => {
@@ -71,7 +101,7 @@ export default function TrainingKanban({ matrix }: { matrix: Matrix }) {
 
       <div className="kanban">
         {STATUSES.map((status) => {
-          const inColumn = cards.filter((c) => c.status === status);
+          const inColumn = shown.filter((c) => c.status === status);
           return (
             <section
               key={status}

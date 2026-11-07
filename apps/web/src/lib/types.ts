@@ -319,7 +319,8 @@ export interface SiteMetaPreview {
 /** Rows are sites, columns are profiles. */
 export interface TrainingMatrix {
   sites: { id: number; name: string; url: string; summary: string; icon_url: string }[];
-  profiles: { id: number; full_name: string }[];
+  /** Profiles used for AI training, with who they are assigned to. */
+  profiles: { id: number; full_name: string; assignees: ProfileAssignee[] }[];
   accounts: {
     id: number;
     profile_id: number;
