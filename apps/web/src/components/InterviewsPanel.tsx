@@ -1,9 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAction } from "@/lib/client";
-import type { Interview, TeamProfile, User } from "@/lib/types";
+import { INTERVIEW_KINDS, KIND_LABEL } from "@/lib/training";
+import type { Interview, InterviewKind, TeamProfile, User } from "@/lib/types";
+import Avatar from "./Avatar";
 import Dropdown from "./Dropdown";
 import InterviewCalendar from "./InterviewCalendar";
 import NewInterviewModal from "./NewInterviewModal";
@@ -106,29 +108,114 @@ export default function InterviewsPanel({
   /* The existing event being edited, or null when creating. */
   const [editing, setEditing] = useState<Interview | null>(null);
 
+  /* Calendar filters. Here rather than in InterviewCalendar so the controls
+     can sit beside the Calendar/List toggle. 0 and "" mean "no filter". */
+  const [fProfile, setFProfile] = useState(0);
+  const [fUser, setFUser] = useState(0);
+  const [fKind, setFKind] = useState<InterviewKind | "">("");
+  const anyFilter = fProfile !== 0 || fUser !== 0 || fKind !== "";
+
+  /* People who actually appear on an event, as a profile's assignee or as
+     whoever booked it. Listing every user would mostly offer options that
+     match nothing. */
+  const userOptions = useMemo(() => {
+    const seen = new Map<number, { id: number; name: string; email: string; avatar?: string | null }>();
+    for (const p of profiles) {
+      for (const a of p.assignees) {
+        if (!seen.has(a.user_id)) {
+          seen.set(a.user_id, { id: a.user_id, name: a.name, email: a.email, avatar: a.avatar });
+        }
+      }
+    }
+    for (const i of interviews) {
+      if (!seen.has(i.interviewer_id)) {
+        seen.set(i.interviewer_id, {
+          id: i.interviewer_id,
+          name: i.interviewer_name,
+          email: i.interviewer_email,
+          avatar: i.interviewer_avatar,
+        });
+      }
+    }
+    return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [profiles, interviews]);
+
   return (
     <div className="stack">
-      <div className="viewswitch" role="group" aria-label="View">
-        <button
-          type="button"
-          className={view === "calendar" ? "on" : ""}
-          onClick={() => setView("calendar")}
-          aria-pressed={view === "calendar"}
-        >
-          Calendar
-        </button>
-        <button
-          type="button"
-          className={view === "list" ? "on" : ""}
-          onClick={() => setView("list")}
-          aria-pressed={view === "list"}
-        >
-          List
-        </button>
+      <div className="cal-bar">
+        <div className="viewswitch" role="group" aria-label="View">
+          <button
+            type="button"
+            className={view === "calendar" ? "on" : ""}
+            onClick={() => setView("calendar")}
+            aria-pressed={view === "calendar"}
+          >
+            Calendar
+          </button>
+          <button
+            type="button"
+            className={view === "list" ? "on" : ""}
+            onClick={() => setView("list")}
+            aria-pressed={view === "list"}
+          >
+            List
+          </button>
+        </div>
+
+        {/* Filters sit with the view toggle. Only the calendar uses them. */}
+        {view === "calendar" && (
+          <div className="cal-filters">
+          <Dropdown<number>
+            value={fProfile}
+            ariaLabel="Filter by profile"
+            onChange={setFProfile}
+            options={[
+              { value: 0, label: "All profiles" },
+              ...profiles.map((p) => ({ value: p.id, label: p.full_name })),
+            ]}
+          />
+          <Dropdown<number>
+            value={fUser}
+            ariaLabel="Filter by user"
+            onChange={setFUser}
+            options={[
+              { value: 0, label: "All users" },
+              ...userOptions.map((u) => ({
+                value: u.id,
+                label: u.name,
+                media: <Avatar name={u.name} email={u.email} src={u.avatar} size={20} />,
+              })),
+            ]}
+          />
+          <Dropdown<InterviewKind | "">
+            value={fKind}
+            ariaLabel="Filter by event type"
+            onChange={setFKind}
+            options={[
+              { value: "", label: "All types" },
+              ...INTERVIEW_KINDS.map((k) => ({ value: k, label: KIND_LABEL[k] })),
+            ]}
+          />
+          {anyFilter && (
+            <button
+              className="btn secondary small"
+              type="button"
+              onClick={() => {
+                setFProfile(0);
+                setFUser(0);
+                setFKind("");
+              }}
+            >
+              Clear
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {view === "calendar" ? (
         <InterviewCalendar
+          filters={{ profile: fProfile, user: fUser, kind: fKind }}
           interviews={interviews}
           profiles={profiles}
           onCreate={manage ? (d) => { setEditing(null); setNewAt(d); } : undefined}

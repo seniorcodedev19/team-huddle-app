@@ -165,6 +165,9 @@ export interface TimeWeek {
   by_day: number[];
   total_minutes: number;
 }
+/** What a calendar event is. Future metrics group on this. */
+export type InterviewKind = "interview" | "ai_interview" | "event";
+
 /** A scheduled meeting between one of our profiles and an outside client. */
 export interface Interview {
   id: number;
@@ -186,6 +189,9 @@ export interface Interview {
   /** Room or meeting link. "" when none was given. */
   location: string;
   topic: string;
+  /* What the event is. Kept as its own field rather than read out of the
+     topic text, because metrics will group by it. */
+  kind: InterviewKind;
   status: "scheduled" | "done" | "passed" | "failed" | "cancelled";
   notes: string | null;
   member_name: string | null;

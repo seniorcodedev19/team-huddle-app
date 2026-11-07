@@ -85,7 +85,7 @@ export default function TodayInterviews({ interviews }: { interviews: Interview[
           </span>
           <strong>Nothing scheduled today</strong>
           <p>Interviews across all your profiles show up here on the day.</p>
-          <a href="/interviews">See what&rsquo;s happening this week</a>
+          <a href="/calendar">See what&rsquo;s happening this week</a>
         </div>
       )}
     </section>

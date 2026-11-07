@@ -2030,7 +2030,6 @@ button.chip.toggle:focus-visible { outline: none; box-shadow: 0 0 0 2.5px var(--
 .profile-editor textarea,
 .profile-editor input,
 .profile-editor .dd { width: 100%; }
-.profile-editor .assignee-picker .dd { max-width: none; }
 /* Digits line up and read as a number rather than prose. */
 .input-phone { font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
 .btn.small { padding: 5px 10px; font-size: 12.5px; }
@@ -2344,8 +2343,6 @@ button.chip.toggle:focus-visible { outline: none; box-shadow: 0 0 0 2.5px var(--
 /* Narrower than the assignee filter: its longest option is "AI training". */
 .profiles-use .dd { min-width: 140px; }
 
-.assignee-picker { display: grid; gap: 9px; }
-.assignee-picker .dd { max-width: 320px; }
 
 /* Assignee, bidder and bidder status: the three "who is on this" choices,
    on one row so their controls line up. */
@@ -2353,7 +2350,6 @@ button.chip.toggle:focus-visible { outline: none; box-shadow: 0 0 0 2.5px var(--
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
   margin-top: 14px;
 }
-.people-row + .assignee-picker { margin-top: 9px; }
 @media (max-width: 800px) {
   .people-row { grid-template-columns: 1fr; }
 }
@@ -2448,7 +2444,43 @@ button.chip.toggle:focus-visible { outline: none; box-shadow: 0 0 0 2.5px var(--
 /* A week time-grid, in the viewer's own time zone. The sidebar filters by
    person; the grid scrolls independently so the day headers stay put. */
 .cal { display: grid; grid-template-columns: 252px minmax(0, 1fr); gap: 16px; align-items: start; }
-.cal-side { display: grid; gap: 10px; }
+/* The sidebar is exactly as tall as the grid beside it. The profiles panel
+   takes the slack and scrolls; the time-zone line under it stays put, rather
+   than scrolling away with the list it is not part of. */
+.cal-side {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+  height: calc(100dvh - 183px);
+  min-height: 420px;
+}
+/* min-height:0 lets a grid row actually shrink so this, not the page, is
+   what scrolls. The panel's own padding would leave the bar flush against
+   the rows, so the scrolling happens on an inner track with a gutter. */
+.cal-legend { min-height: 0; display: flex; flex-direction: column; }
+.cal-legend .panel-title { flex: none; }
+.cal-people {
+  min-height: 0;
+  overflow-y: auto;
+  /* Room for the bar so it never sits on top of a name. */
+  padding-right: 6px;
+  margin-right: -6px;
+  /* Firefox has no ::-webkit pseudo-elements; this is the equivalent. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+/* Slim and quiet, matching .profile-accounts rather than the OS default,
+   which is wide and heavy against a 252px panel. */
+.cal-people::-webkit-scrollbar { width: 8px; }
+.cal-people::-webkit-scrollbar-track { background: transparent; }
+.cal-people::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+  /* Inset by a transparent border so the thumb reads as 4px, not 8px. */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.cal-people::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: padding-box; }
 .cal-legend { padding: 14px; }
 .cal-person {
   display: flex; align-items: center; gap: 8px;
@@ -2500,7 +2532,18 @@ button.chip.toggle:focus-visible { outline: none; box-shadow: 0 0 0 2.5px var(--
   background: var(--accent); color: var(--accent-ink);
 }
 
-.cal-grid { max-height: 62vh; overflow: auto; position: relative; }
+/* Fill the screen rather than a fixed slice of it: at 62vh the grid left a
+   dead band below it while the page still scrolled, so the week was cramped
+   and the window was not full. The subtracted space is everything above the
+   grid — header, toolbar, day headers — plus a little breathing room below.
+   dvh, not vh, so mobile browser chrome collapsing does not overshoot. */
+.cal-grid {
+  max-height: calc(100dvh - 276px);
+  /* Below this the grid is too short to be useful; let the page scroll. */
+  min-height: 420px;
+  overflow: auto;
+  position: relative;
+}
 /* The hour gutter stays put when the grid scrolls sideways on narrow screens;
    the corner sits above both sticky axes. */
 .cal-gutter { position: sticky; left: 0; z-index: 5; background: var(--surface); }
@@ -3022,3 +3065,15 @@ html[data-nav="off"] .nav-collapse { left: 0; }
    rather than :last-child, which would also catch the last control of any
    other .profiles-bar on the site. */
 .profiles-bar .bar-end { margin-left: auto; }
+
+/* Calendar filters, on the row with the Calendar/List toggle. */
+.cal-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.cal-filters .dd { min-width: 150px; }
+
+/* The Calendar/List toggle and the calendar filters share one line. */
+.cal-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }

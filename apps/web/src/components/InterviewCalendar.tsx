@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Interview, TeamProfile } from "@/lib/types";
+import type { Interview, InterviewKind, TeamProfile } from "@/lib/types";
 
 /* A week calendar for interviews, in the viewer's own time zone.
 
@@ -77,16 +77,21 @@ const hourLabel = (h: number) =>
 export default function InterviewCalendar({
   interviews,
   profiles,
+  filters,
   onOpen,
   onCreate,
 }: {
   interviews: Interview[];
   /** The profiles listed down the side, for the colour key and the filter. */
   profiles: TeamProfile[];
+  /* Owned by the panel so its controls sit beside the view toggle. 0 and ""
+     mean "no filter". */
+  filters: { profile: number; user: number; kind: InterviewKind | "" };
   onOpen?: (i: Interview) => void;
   /** Called with the clicked slot, local time, so a parent can prefill a form. */
   onCreate?: (at: Date) => void;
 }) {
+  const { profile: fProfile, user: fUser, kind: fKind } = filters;
   const [view, setView] = useState<"week" | "month">("week");
   const [anchor, setAnchor] = useState(() => startOfWeek(new Date()));
   /** Profile ids switched off in the side list. */
@@ -132,14 +137,30 @@ export default function InterviewCalendar({
 
   /* Events with no profile stay visible: hiding a profile should hide that
      profile's interviews, never quietly swallow ones it has no claim on. */
+  const assigneesOf = useMemo(
+    () => new Map(profiles.map((p) => [p.id, p.assignees])),
+    [profiles],
+  );
+
   const shown = useMemo(
     () =>
       interviews.filter((i) => {
         const pid = i.profile_id ?? (i.member_id === null ? undefined : profileOfUser.get(i.member_id));
-        return pid === undefined || !hidden.has(pid);
+        if (pid !== undefined && hidden.has(pid)) return false;
+        if (fProfile && pid !== fProfile) return false;
+        if (fKind && i.kind !== fKind) return false;
+        /* "User" is whoever the event involves on our side: the profile's
+           assignees, or whoever booked it. */
+        if (fUser) {
+          const assignees = pid === undefined ? [] : (assigneesOf.get(pid) ?? []);
+          const mine = i.interviewer_id === fUser || assignees.some((a) => a.user_id === fUser);
+          if (!mine) return false;
+        }
+        return true;
       }),
-    [interviews, hidden, profileOfUser],
+    [interviews, hidden, profileOfUser, fProfile, fKind, fUser, assigneesOf],
   );
+
 
   /* Lay events out per day. Overlapping events split the column width between
      them, the way a calendar does, rather than stacking out of sight. */
@@ -202,37 +223,41 @@ export default function InterviewCalendar({
       <aside className="cal-side">
         <div className="panel cal-legend">
           <h2 className="panel-title">Profiles</h2>
-          {profiles.length === 0 ? (
-            <p className="muted small" style={{ margin: 0 }}>
-              No profiles yet.
-            </p>
-          ) : (
-            profiles.map((p) => (
-              <label className="cal-person" key={p.id}>
-                <input
-                  type="checkbox"
-                  checked={!hidden.has(p.id)}
-                  onChange={() =>
-                    setHidden((s) => {
-                      const next = new Set(s);
-                      if (next.has(p.id)) next.delete(p.id);
-                      else next.add(p.id);
-                      return next;
-                    })
-                  }
-                />
-                <span className={`cal-dot s${colourOf.get(p.id) ?? 0}`} aria-hidden="true" />
-                <span className="cal-person-text">
-                  <strong>{p.full_name}</strong>
-                  <span className="muted small">
-                    {p.assignees.length === 0
-                      ? "Unassigned"
-                      : p.assignees.map((a) => a.name).join(", ")}
+          {/* The list scrolls, not the panel: the heading stays put and the
+              scrollbar runs beside the names rather than the whole card. */}
+          <div className="cal-people">
+            {profiles.length === 0 ? (
+              <p className="muted small" style={{ margin: 0 }}>
+                No profiles yet.
+              </p>
+            ) : (
+              profiles.map((p) => (
+                <label className="cal-person" key={p.id}>
+                  <input
+                    type="checkbox"
+                    checked={!hidden.has(p.id)}
+                    onChange={() =>
+                      setHidden((s) => {
+                        const next = new Set(s);
+                        if (next.has(p.id)) next.delete(p.id);
+                        else next.add(p.id);
+                        return next;
+                      })
+                    }
+                  />
+                  <span className={`cal-dot s${colourOf.get(p.id) ?? 0}`} aria-hidden="true" />
+                  <span className="cal-person-text">
+                    <strong>{p.full_name}</strong>
+                    <span className="muted small">
+                      {p.assignees.length === 0
+                        ? "Unassigned"
+                        : p.assignees.map((a) => a.name).join(", ")}
+                    </span>
                   </span>
-                </span>
-              </label>
-            ))
-          )}
+                </label>
+              ))
+            )}
+          </div>
         </div>
         <p className="muted small cal-tz">
           Times are {Intl.DateTimeFormat().resolvedOptions().timeZone}.
@@ -301,6 +326,7 @@ export default function InterviewCalendar({
             </button>
           </div>
         </div>
+
 
         {view === "month" ? (
           <div className="cal-month">

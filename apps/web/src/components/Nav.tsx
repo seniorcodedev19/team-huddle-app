@@ -11,7 +11,7 @@ export default function Nav({ me }: { me: User }) {
     { href: "/dashboard", label: "Dashboard" },
     { href: "/team", label: "Team" },
     { href: "/time", label: "Time tracking" },
-    { href: "/interviews", label: "Interviews" },
+    { href: "/calendar", label: "Calendar" },
     { href: "/agent", label: "Agent" },
     { href: "/profiles", label: "Profiles" },
     { href: "/ai-training", label: "AI Training" },

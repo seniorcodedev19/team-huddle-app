@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAction } from "@/lib/client";
-import type { Interview, TeamProfile } from "@/lib/types";
+import { INTERVIEW_KINDS, KIND_LABEL } from "@/lib/training";
+import type { Interview, InterviewKind, TeamProfile } from "@/lib/types";
 import Dropdown from "./Dropdown";
 
 /* The New event dialog, opened by clicking a slot on the interview calendar.
@@ -67,6 +68,7 @@ export default function NewInterviewModal({
   const [description, setDescription] = useState(editing?.notes ?? "");
   const [clientName, setClientName] = useState(editing?.client_name ?? "");
   const [clientEmail, setClientEmail] = useState(editing?.client_email ?? "");
+  const [kind, setKind] = useState<InterviewKind>(editing?.kind ?? "interview");
   const [status, setStatus] = useState<Interview["status"]>(editing?.status ?? "scheduled");
   const [localError, setLocalError] = useState<string | null>(null);
   /* Deleting is irreversible, so the button asks once before doing it. */
@@ -110,6 +112,7 @@ export default function NewInterviewModal({
       notes: description.trim(),
       client_name: clientName.trim(),
       client_email: clientEmail.trim(),
+      kind,
     };
     const ok = editing
       ? await run("PATCH", `/interviews/${editing.id}`, { ...body, status })
@@ -239,6 +242,25 @@ export default function NewInterviewModal({
             </div>
           </div>
 
+          <div>
+            <label htmlFor="ne-kind">Type</label>
+            <Dropdown<InterviewKind>
+              id="ne-kind"
+              ariaLabel="Event type"
+              value={kind}
+              onChange={(k) => {
+                setKind(k);
+                /* passed and failed describe an interview's outcome. If the
+                   event stops being an interview, a verdict already set on
+                   it no longer means anything, so fall back to scheduled. */
+                if (k === "event" && (status === "passed" || status === "failed")) {
+                  setStatus("scheduled");
+                }
+              }}
+              options={INTERVIEW_KINDS.map((k) => ({ value: k, label: KIND_LABEL[k] }))}
+            />
+          </div>
+
           {/* Only when editing: a new booking is always 'scheduled', and the
               outcome is what someone comes back to change afterwards. */}
           {editing && (
@@ -249,11 +271,17 @@ export default function NewInterviewModal({
                 ariaLabel="Status"
                 value={status}
                 onChange={setStatus}
+                /* An interview has an outcome; a plain event only happens or
+                   does not, so passed and failed are left out for one. */
                 options={[
                   { value: "scheduled", label: "Scheduled" },
                   { value: "done", label: "Done — outcome not recorded" },
-                  { value: "passed", label: "Passed" },
-                  { value: "failed", label: "Failed" },
+                  ...(kind === "event"
+                    ? []
+                    : [
+                        { value: "passed" as const, label: "Passed" },
+                        { value: "failed" as const, label: "Failed" },
+                      ]),
                   { value: "cancelled", label: "Cancelled" },
                 ]}
               />

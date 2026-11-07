@@ -1,4 +1,4 @@
-import type { BidderStatus, TrainingStatus } from "./types";
+import type { BidderStatus, InterviewKind, TrainingStatus } from "./types";
 
 /* Declaration order is display order: STATUSES is derived from these keys,
    so the board columns and every dropdown follow it. */
@@ -63,3 +63,18 @@ export const USE_TONE: Record<ProfileUse, string> = {
 };
 
 export const PROFILE_USES = Object.keys(USE_LABEL) as ProfileUse[];
+
+/* Calendar event kinds. Declaration order is menu order. */
+export const KIND_LABEL: Record<InterviewKind, string> = {
+  interview: "Interview",
+  ai_interview: "AI interview",
+  event: "Event",
+};
+
+export const KIND_TONE: Record<InterviewKind, string> = {
+  interview: "neutral",
+  ai_interview: "violet",
+  event: "muted",
+};
+
+export const INTERVIEW_KINDS = Object.keys(KIND_LABEL) as InterviewKind[];

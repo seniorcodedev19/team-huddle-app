@@ -7,7 +7,7 @@ import { audit, h, HttpError } from "../util";
 export const interviews = Router();
 
 const listSql = `
-  select i.id, i.member_id, i.interviewer_id, i.scheduled_at, i.topic, i.status, i.notes,
+  select i.id, i.member_id, i.interviewer_id, i.scheduled_at, i.topic, i.status, i.notes, i.kind,
          i.profile_id, i.ends_at, i.all_day, i.location,
          i.client_name, i.client_email,
          pr.full_name as profile_name, pr.email as profile_email,
@@ -97,6 +97,8 @@ interviews.post("/interviews", requireRole("manager", "admin"), h(async (req, re
       location: z.string().trim().max(500).default(""),
       notes: z.string().trim().max(4000).default(""),
       topic: z.string().trim().min(1).max(120).default("1:1 review"),
+      /* What this is, for the metrics that will group by it later. */
+      kind: z.enum(["interview", "ai_interview", "event"]).default("interview"),
     })
     .parse(req.body);
 
@@ -128,10 +130,10 @@ interviews.post("/interviews", requireRole("manager", "admin"), h(async (req, re
 
   const { rows } = await pool.query(
     `insert into interviews
-       (member_id, interviewer_id, scheduled_at, topic, profile_id, ends_at,
+       (member_id, interviewer_id, scheduled_at, topic, kind, profile_id, ends_at,
         all_day, location, notes, client_name, client_email)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id`,
-    [memberId, actor.id, b.scheduled_at, b.topic, b.profile_id ?? null,
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning id`,
+    [memberId, actor.id, b.scheduled_at, b.topic, b.kind, b.profile_id ?? null,
      b.ends_at ?? null, b.all_day, b.location, b.notes || null,
      b.client_name, b.client_email],
   );
@@ -172,6 +174,7 @@ interviews.patch("/interviews/:id", requireRole("manager", "admin"), h(async (re
       client_email: z.string().trim().email().max(200).or(z.literal("")),
       profile_id: z.number().int(),
       topic: z.string().trim().min(1).max(120),
+      kind: z.enum(["interview", "ai_interview", "event"]),
       status: z.enum(["scheduled", "done", "passed", "failed", "cancelled"]),
       notes: z.string().trim().max(4000),
     })
@@ -188,6 +191,7 @@ interviews.patch("/interviews/:id", requireRole("manager", "admin"), h(async (re
     `update interviews set
        scheduled_at = coalesce($2, scheduled_at),
        topic        = coalesce($3, topic),
+       kind         = coalesce($12, kind),
        status       = coalesce($4, status),
        notes        = coalesce($5, notes),
        ends_at      = coalesce($6, ends_at),
@@ -199,7 +203,8 @@ interviews.patch("/interviews/:id", requireRole("manager", "admin"), h(async (re
      where id = $1`,
     [id, b.scheduled_at ?? null, b.topic ?? null, b.status ?? null, b.notes ?? null,
      b.ends_at ?? null, b.all_day ?? null, b.location ?? null,
-     b.client_name ?? null, b.client_email ?? null, b.profile_id ?? null],
+     b.client_name ?? null, b.client_email ?? null, b.profile_id ?? null,
+     b.kind ?? null],
   );
   await audit(actor.id, "update", "interview", id, { status: b.status });
   res.json({ ok: true });

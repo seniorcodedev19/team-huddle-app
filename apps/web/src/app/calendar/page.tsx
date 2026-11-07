@@ -11,7 +11,8 @@ export default async function InterviewsPage() {
 
   return (
     <>
-      <h1>Interviews</h1>
+      {/* Matches the nav label; the subtitle says what is on the calendar. */}
+      <h1>Calendar</h1>
       <p className="sub">Scheduled interviews between a profile and a client. Click a slot to add one.</p>
       {list.ok ? (
         <InterviewsPanel

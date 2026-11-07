@@ -57,7 +57,7 @@ export function Icon({
     | "dashboard"
     | "team"
     | "time"
-    | "interviews"
+    | "calendar"
     | "profile"
     | "admin"
     | "logout"
@@ -106,10 +106,11 @@ export function Icon({
           <path d="M12 7.5V12l3 2" />
         </svg>
       );
-    case "interviews":
+    case "calendar":
       return (
         <svg {...common}>
-          <path d="M5 6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v7A2.5 2.5 0 0 1 16.5 16H11l-4 3.5V16H7.5A2.5 2.5 0 0 1 5 13.5z" />
+          <rect x="3.5" y="5.5" width="17" height="15" rx="2.5" />
+          <path d="M8 3.5v4M16 3.5v4M3.5 10.5h17" />
         </svg>
       );
     case "profile":

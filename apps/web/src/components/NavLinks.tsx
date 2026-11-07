@@ -11,7 +11,7 @@ const icons = {
   "/dashboard": "dashboard",
   "/team": "team",
   "/time": "time",
-  "/interviews": "interviews",
+  "/calendar": "calendar",
   "/agent": "agent",
   "/profiles": "profiles",
   "/ai-training": "training",
