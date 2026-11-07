@@ -275,7 +275,16 @@ week.patch("/week/status", requireRole("admin"), h(async (req, res) => {
   res.json({ ok: true, status: b.status });
 }));
 
-async function teamWeekRows(actor: User, ws: string, teamIdParam?: number) {
+/* One row per person for the `weeks` weeks ending at `ws`.
+
+   `weeks` defaults to 1, the single-week view the dashboard and Team tab have
+   always shown. Above that the rows are summed, so a "last 30 days" view is
+   the same shape and the table renders it unchanged.
+
+   What cannot be summed is dropped rather than guessed: `status` and
+   `report_id` belong to one week's report, and `day_points` is a
+   seven-element week. Over a range they are null / an empty array. */
+async function teamWeekRows(actor: User, ws: string, teamIdParam?: number, weeks = 1) {
   const teamId = actor.role === "admin" ? (teamIdParam ?? null) : null;
   const { rows: users } = await pool.query<User & { team_name: string | null }>(
     `select u.id, u.email, u.name, u.role, u.team_id, u.active, u.avatar, t.name as team_name
@@ -284,13 +293,24 @@ async function teamWeekRows(actor: User, ws: string, teamIdParam?: number) {
        and ($1::int is null or u.team_id = $1) order by u.name, u.email`,
     [teamId],
   );
+  /* Oldest first, so the single-week case is unchanged and a range ends on
+     the requested week. */
+  const starts = Array.from({ length: weeks }, (_, i) => addDays(ws, -7 * (weeks - 1 - i)));
+  const single = weeks === 1;
+
   const rows = [];
   for (const u of users) {
-    const s = await weekSnapshot(u, ws);
+    /* Each weekSnapshot is four queries, so run a person's weeks together
+       rather than one after another; the range views would otherwise be
+       weeks x 4 sequential round trips per person. */
+    const snaps = await Promise.all(starts.map((start) => weekSnapshot(u, start)));
+    // The last week in the range is the one whose report status we report on.
+    const s = snaps[snaps.length - 1];
     const status = s.report?.status ?? "draft";
     const units = new Map(s.metrics.map((m) => [m.id, m.unit]));
+    const allBreakdown = snaps.flatMap((x) => x.score.breakdown);
     const metric_points = Object.values(
-      s.score.breakdown.reduce<
+      allBreakdown.reduce<
         Record<
           number,
           {
@@ -330,19 +350,32 @@ async function teamWeekRows(actor: User, ws: string, teamIdParam?: number) {
         return acc;
       }, {}),
     );
+    /* Achievement is a percentage, so it averages over the weeks that had
+       one rather than summing. Weeks with no ratio metrics report null and
+       are left out entirely instead of counting as zero. */
+    const pcts = snaps.map((x) => x.score.achievement_pct).filter((v): v is number => v !== null);
+    const achievement_pct = pcts.length ? r2(pcts.reduce((a, b) => a + b, 0) / pcts.length) : null;
+
     rows.push({
       user_id: u.id,
       name: u.name || u.email,
       email: u.email,
       avatar: u.avatar ?? null,
       role: u.role,
+      /* A report belongs to one week. Over a range these describe the last
+         week in it — a real value rather than a null the whole UI would have
+         to special-case, and the week whose approval is still actionable. */
       status,
       report_id: s.report?.id ?? null,
-      has_data: s.hasData,
-      total: s.score.total,
-      bonus: s.score.bonus,
-      achievement_pct: s.score.achievement_pct,
-      day_points: s.day_points,
+      has_data: snaps.some((x) => x.hasData),
+      total: r2(snaps.reduce((a, x) => a + x.score.total, 0)),
+      bonus: r2(snaps.reduce((a, x) => a + x.score.bonus, 0)),
+      achievement_pct,
+      /* Seven numbers, one per weekday, summed across the weeks in the range
+         so the day-of-week shape still reads. */
+      day_points: single
+        ? s.day_points
+        : s.day_points.map((_, i) => r2(snaps.reduce((a, x) => a + (x.day_points[i] ?? 0), 0))),
       team_id: u.team_id,
       team_name: u.team_name,
       metric_points,
@@ -352,9 +385,26 @@ async function teamWeekRows(actor: User, ws: string, teamIdParam?: number) {
 }
 
 week.get("/team-week", h(async (req, res) => {
-  const q = z.object({ week_start: z.string().optional(), team_id: z.coerce.number().int().optional() }).parse(req.query);
+  const q = z
+    .object({
+      week_start: z.string().optional(),
+      team_id: z.coerce.number().int().optional(),
+      /* How many weeks back to include, ending at week_start. 1 is the
+         single-week view; 13 covers a quarter. Capped because each week is
+         four queries per person. */
+      weeks: z.coerce.number().int().min(1).max(13).optional(),
+    })
+    .parse(req.query);
   const ws = parseWeek(q.week_start);
-  res.json({ week_start: ws, week_end: addDays(ws, 6), rows: await teamWeekRows(req.user!, ws, q.team_id) });
+  const weeks = q.weeks ?? 1;
+  res.json({
+    week_start: ws,
+    week_end: addDays(ws, 6),
+    weeks,
+    // The first day covered, so a caller can label the range it got back.
+    range_start: addDays(ws, -7 * (weeks - 1)),
+    rows: await teamWeekRows(req.user!, ws, q.team_id, weeks),
+  });
 }));
 
 const csvCell = (v: unknown) => {
@@ -363,14 +413,22 @@ const csvCell = (v: unknown) => {
 };
 
 week.get("/export.csv", h(async (req, res) => {
-  const q = z.object({ week_start: z.string().optional(), team_id: z.coerce.number().int().optional() }).parse(req.query);
+  const q = z
+    .object({
+      week_start: z.string().optional(),
+      team_id: z.coerce.number().int().optional(),
+      weeks: z.coerce.number().int().min(1).max(13).optional(),
+    })
+    .parse(req.query);
   const ws = parseWeek(q.week_start);
-  const rows = await teamWeekRows(req.user!, ws, q.team_id);
+  const weeks = q.weeks ?? 1;
+  const rows = await teamWeekRows(req.user!, ws, q.team_id, weeks);
   const lines = [["name", "email", "role", "status", "total", "bonus", "achievement_pct"].join(",")].concat(
     rows.map((r) => [r.name, r.email, r.role, r.status, r.total, r.bonus, r.achievement_pct ?? ""].map(csvCell).join(",")),
   );
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
-  res.setHeader("Content-Disposition", `attachment; filename="week-${ws}.csv"`);
+  const fileName = weeks === 1 ? `week-${ws}.csv` : `weeks-${addDays(ws, -7 * (weeks - 1))}-to-${ws}.csv`;
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
   res.send(lines.join("\n"));
 }));
 

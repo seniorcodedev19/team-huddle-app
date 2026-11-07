@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Interview, User } from "@/lib/types";
+import type { Interview, TeamProfile } from "@/lib/types";
 
 /* A week calendar for interviews, in the viewer's own time zone.
 
@@ -31,6 +31,31 @@ export function addDays(d: Date, n: number): Date {
   return x;
 }
 
+/** Midnight local on the 1st of the month containing `d`. */
+export function startOfMonth(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  x.setDate(1);
+  return x;
+}
+
+export function addMonths(d: Date, n: number): Date {
+  const x = startOfMonth(d);
+  x.setMonth(x.getMonth() + n);
+  return x;
+}
+
+/* The grid a month view draws: whole weeks, Sunday-first, covering every day
+   of the month. Six rows keeps the grid a constant height as months change,
+   so the page does not jump when you page through. */
+export function monthGrid(month: Date): Date[] {
+  const first = startOfWeek(startOfMonth(month));
+  return [...Array(42)].map((_, i) => addDays(first, i));
+}
+
+const sameMonth = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
+
 const sameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
@@ -51,18 +76,20 @@ const hourLabel = (h: number) =>
 
 export default function InterviewCalendar({
   interviews,
-  people,
+  profiles,
   onOpen,
   onCreate,
 }: {
   interviews: Interview[];
-  /** Everyone who can appear in the legend, for the colour key and filter. */
-  people: User[];
+  /** The profiles listed down the side, for the colour key and the filter. */
+  profiles: TeamProfile[];
   onOpen?: (i: Interview) => void;
   /** Called with the clicked slot, local time, so a parent can prefill a form. */
   onCreate?: (at: Date) => void;
 }) {
+  const [view, setView] = useState<"week" | "month">("week");
   const [anchor, setAnchor] = useState(() => startOfWeek(new Date()));
+  /** Profile ids switched off in the side list. */
   const [hidden, setHidden] = useState<Set<number>>(new Set());
   const [now, setNow] = useState(() => new Date());
   const gridRef = useRef<HTMLDivElement>(null);
@@ -75,17 +102,43 @@ export default function InterviewCalendar({
 
   const days = useMemo(() => [...Array(7)].map((_, i) => addDays(anchor, i)), [anchor]);
 
-  /* One colour per person, assigned by their position in the list so a given
-     person keeps the same colour as the week changes. */
+  /* An interview names its profile directly. Rows from the older internal
+     1:1, which have no profile_id, fall back to the profile their member is
+     assigned to so they still group and colour sensibly. */
+  const profileOfUser = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const p of profiles) {
+      for (const a of p.assignees) if (!m.has(a.user_id)) m.set(a.user_id, p.id);
+    }
+    return m;
+  }, [profiles]);
+
+  const profileOf = (ev: Interview): number | undefined =>
+    ev.profile_id ?? (ev.member_id === null ? undefined : profileOfUser.get(ev.member_id));
+
+  /* One colour per profile, by position in the list, so a profile keeps its
+     colour as the week changes. Events with no profile fall back to the
+     first colour. */
   const colourOf = useMemo(() => {
     const m = new Map<number, number>();
-    people.forEach((p, i) => m.set(p.id, i % 6));
+    profiles.forEach((p, i) => m.set(p.id, i % 6));
     return m;
-  }, [people]);
+  }, [profiles]);
 
+  const colourForEvent = (ev: Interview) => {
+    const pid = profileOf(ev);
+    return pid === undefined ? 0 : colourOf.get(pid) ?? 0;
+  };
+
+  /* Events with no profile stay visible: hiding a profile should hide that
+     profile's interviews, never quietly swallow ones it has no claim on. */
   const shown = useMemo(
-    () => interviews.filter((i) => !hidden.has(i.member_id)),
-    [interviews, hidden],
+    () =>
+      interviews.filter((i) => {
+        const pid = i.profile_id ?? (i.member_id === null ? undefined : profileOfUser.get(i.member_id));
+        return pid === undefined || !hidden.has(pid);
+      }),
+    [interviews, hidden, profileOfUser],
   );
 
   /* Lay events out per day. Overlapping events split the column width between
@@ -119,10 +172,26 @@ export default function InterviewCalendar({
     return map;
   }, [shown, days]);
 
+  /* Month view: the same filtered events, bucketed by local day. */
+  const monthDays = useMemo(() => (view === "month" ? monthGrid(anchor) : []), [view, anchor]);
+  const byDate = useMemo(() => {
+    const m = new Map<string, Interview[]>();
+    if (view !== "month") return m;
+    for (const ev of shown) {
+      const at = new Date(ev.scheduled_at);
+      const k = `${at.getFullYear()}-${at.getMonth()}-${at.getDate()}`;
+      const list = m.get(k);
+      if (list) list.push(ev);
+      else m.set(k, [ev]);
+    }
+    for (const list of m.values()) list.sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
+    return m;
+  }, [shown, view]);
+
   // Open on the working day rather than midnight.
   useEffect(() => {
-    if (gridRef.current) gridRef.current.scrollTop = 8 * HOUR_PX;
-  }, []);
+    if (view === "week" && gridRef.current) gridRef.current.scrollTop = 8 * HOUR_PX;
+  }, [view]);
 
   const today = new Date();
   const weekEnd = addDays(anchor, 6);
@@ -132,13 +201,13 @@ export default function InterviewCalendar({
     <div className="cal">
       <aside className="cal-side">
         <div className="panel cal-legend">
-          <h2 className="panel-title">People</h2>
-          {people.length === 0 ? (
+          <h2 className="panel-title">Profiles</h2>
+          {profiles.length === 0 ? (
             <p className="muted small" style={{ margin: 0 }}>
-              Nobody to show yet.
+              No profiles yet.
             </p>
           ) : (
-            people.map((p) => (
+            profiles.map((p) => (
               <label className="cal-person" key={p.id}>
                 <input
                   type="checkbox"
@@ -154,8 +223,12 @@ export default function InterviewCalendar({
                 />
                 <span className={`cal-dot s${colourOf.get(p.id) ?? 0}`} aria-hidden="true" />
                 <span className="cal-person-text">
-                  <strong>{p.name || p.email}</strong>
-                  <span className="muted small">{p.email}</span>
+                  <strong>{p.full_name}</strong>
+                  <span className="muted small">
+                    {p.assignees.length === 0
+                      ? "Unassigned"
+                      : p.assignees.map((a) => a.name).join(", ")}
+                  </span>
                 </span>
               </label>
             ))
@@ -168,14 +241,20 @@ export default function InterviewCalendar({
 
       <div className="cal-main">
         <div className="cal-toolbar">
-          <button className="btn secondary" type="button" onClick={() => setAnchor(startOfWeek(new Date()))}>
+          <button
+            className="btn secondary"
+            type="button"
+            onClick={() =>
+              setAnchor(view === "month" ? startOfMonth(new Date()) : startOfWeek(new Date()))
+            }
+          >
             Today
           </button>
           <button
             className="icon-btn"
             type="button"
-            aria-label="Previous week"
-            onClick={() => setAnchor((a) => addDays(a, -7))}
+            aria-label={view === "month" ? "Previous month" : "Previous week"}
+            onClick={() => setAnchor((a) => (view === "month" ? addMonths(a, -1) : addDays(a, -7)))}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M15 5l-7 7 7 7" />
@@ -184,27 +263,122 @@ export default function InterviewCalendar({
           <button
             className="icon-btn"
             type="button"
-            aria-label="Next week"
-            onClick={() => setAnchor((a) => addDays(a, 7))}
+            aria-label={view === "month" ? "Next month" : "Next week"}
+            onClick={() => setAnchor((a) => (view === "month" ? addMonths(a, 1) : addDays(a, 7)))}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M9 5l7 7-7 7" />
             </svg>
           </button>
-          <h2 className="cal-range">{rangeLabel(anchor, weekEnd)}</h2>
+          <h2 className="cal-range">
+            {view === "month"
+              ? fmt(anchor, { month: "long", year: "numeric" })
+              : rangeLabel(anchor, weekEnd)}
+          </h2>
+
+          <div className="viewswitch cal-viewswitch" role="group" aria-label="Calendar view">
+            <button
+              type="button"
+              className={view === "week" ? "on" : ""}
+              aria-pressed={view === "week"}
+              onClick={() => {
+                setView("week");
+                setAnchor((a) => startOfWeek(sameMonth(a, new Date()) ? new Date() : a));
+              }}
+            >
+              Week
+            </button>
+            <button
+              type="button"
+              className={view === "month" ? "on" : ""}
+              aria-pressed={view === "month"}
+              onClick={() => {
+                setView("month");
+                setAnchor((a) => startOfMonth(a));
+              }}
+            >
+              Month
+            </button>
+          </div>
         </div>
 
-        <div className="cal-head">
-          <span className="cal-gutter" aria-hidden="true" />
+        {view === "month" ? (
+          <div className="cal-month">
+            {/* One header row of weekday names, then six weeks of cells, so
+                the grid keeps its height as the month changes. */}
+            {monthDays.slice(0, 7).map((d) => (
+              <span className="cal-mhead" key={`mh${d.getDay()}`}>
+                {fmt(d, { weekday: "short" })}
+              </span>
+            ))}
+            {monthDays.map((d) => {
+              const list = byDate.get(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`) ?? [];
+              const outside = !sameMonth(d, anchor);
+              return (
+                <div
+                  className={`cal-mcell${outside ? " outside" : ""}${sameDay(d, today) ? " today" : ""}`}
+                  key={`m${d.getTime()}`}
+                >
+                  <button
+                    type="button"
+                    className="cal-mdate"
+                    aria-label={`New interview on ${fmt(d, { month: "long", day: "numeric" })}`}
+                    onClick={() => {
+                      const at = new Date(d);
+                      at.setHours(9, 0, 0, 0);
+                      onCreate?.(at);
+                    }}
+                  >
+                    {d.getDate()}
+                  </button>
+                  <div className="cal-mevents">
+                    {list.slice(0, 3).map((ev) => (
+                      <button
+                        type="button"
+                        key={ev.id}
+                        className={`cal-mevent s${colourForEvent(ev)} status-${ev.status}`}
+                        title={[
+                          new Date(ev.scheduled_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }),
+                          ev.profile_name ?? ev.member_name,
+                          ev.client_name || null,
+                          ev.topic || null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                        onClick={() => onOpen?.(ev)}
+                      >
+                        <span className="cal-mdot" aria-hidden="true" />
+                        <span className="cal-mtime">
+                          {ev.all_day
+                            ? "All day"
+                            : new Date(ev.scheduled_at).toLocaleTimeString(undefined, { hour: "numeric" })}
+                        </span>
+                        <span className="cal-mtitle">
+                          {ev.client_name || ev.profile_name || ev.member_name || "Interview"}
+                        </span>
+                      </button>
+                    ))}
+                    {list.length > 3 && (
+                      <span className="cal-mmore">+{list.length - 3} more</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+        /* Headers and hour grid share one grid so their columns can never
+           disagree — see the .cal-grid comment in globals.css. Row 1 is the
+           sticky header; row 2 is the gutter plus the seven day columns. */
+        <div className="cal-grid" ref={gridRef}>
+          <span className="cal-corner" aria-hidden="true" />
           {days.map((d) => (
-            <span className={`cal-dayhead${sameDay(d, today) ? " today" : ""}`} key={d.getTime()}>
+            <span className={`cal-dayhead${sameDay(d, today) ? " today" : ""}`} key={`h${d.getTime()}`}>
               <span className="cal-dayname">{fmt(d, { weekday: "short" })}</span>
               <span className="cal-daynum">{d.getDate()}</span>
             </span>
           ))}
-        </div>
 
-        <div className="cal-grid" ref={gridRef}>
           <div className="cal-gutter">
             {[...Array(24)].map((_, h) => (
               <span className="cal-hour" key={h} style={{ height: HOUR_PX }}>
@@ -242,14 +416,21 @@ export default function InterviewCalendar({
                 <button
                   type="button"
                   key={ev.id}
-                  className={`cal-event s${colourOf.get(ev.member_id) ?? 0} status-${ev.status}`}
+                  className={`cal-event s${colourForEvent(ev)} status-${ev.status}`}
                   style={{
                     top: (at.getHours() + at.getMinutes() / 60) * HOUR_PX,
                     height: HOUR_PX - 4,
                     left: `${(col / of) * 100}%`,
                     width: `${100 / of}%`,
                   }}
-                  title={`${at.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })} · ${ev.member_name}${ev.topic ? ` · ${ev.topic}` : ""}`}
+                  title={[
+                    at.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }),
+                    ev.profile_name ?? ev.member_name,
+                    ev.client_name || null,
+                    ev.topic || null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                   onClick={() => onOpen?.(ev)}
                 >
                   {/* Time and name share the first line: an hour block is
@@ -259,7 +440,9 @@ export default function InterviewCalendar({
                     <span className="cal-event-time">
                       {at.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
                     </span>
-                    <span className="cal-event-title">{ev.member_name}</span>
+                    <span className="cal-event-title">
+                      {ev.client_name || ev.profile_name || ev.member_name || "Interview"}
+                    </span>
                   </span>
                   {ev.topic && <span className="cal-event-sub">{ev.topic}</span>}
                 </button>
@@ -267,6 +450,7 @@ export default function InterviewCalendar({
             </div>
           ))}
         </div>
+        )}
       </div>
     </div>
   );

@@ -4,19 +4,29 @@ import PointsChart from "@/components/PointsChart";
 import StatTiles from "@/components/StatTiles";
 import StatusPill from "@/components/StatusPill";
 import TeamTiles from "@/components/TeamTiles";
-import { TeamDailyDonut, TeamStatusDonut } from "@/components/TeamOverview";
-import TeamWeekTable from "@/components/TeamWeekTable";
+import { TeamDailyDonut, TeamInterviewDonut } from "@/components/TeamOverview";
+import TodayInterviews from "@/components/TodayInterviews";
 import TrainingSummary from "@/components/TrainingSummary";
 import WeekGrid from "@/components/WeekGrid";
 import WeekPicker from "@/components/WeekPicker";
 import { apiFetch, tryFetch } from "@/lib/api";
 import { addDays, weekParam } from "@/lib/dates";
-import type { TeamProfile, TeamWeekRow, TrainingMatrix, User, WeekData } from "@/lib/types";
+import type { Interview, TeamProfile, TeamWeekRow, TrainingMatrix, User, WeekData } from "@/lib/types";
 
-export default async function Dashboard({ searchParams }: { searchParams: Promise<{ week?: string }> }) {
+export default async function Dashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{ week?: string; weeks?: string }>;
+}) {
   const sp = await searchParams;
   const week = weekParam(sp.week);
-  const wq = week ? `?week_start=${week}` : "";
+  /* How many weeks the view covers, ending at the selected one. The API caps
+     it at 13; anything else falls back to a single week. */
+  const weeks = Math.min(Math.max(Number(sp.weeks) || 1, 1), 13);
+  const q = new URLSearchParams();
+  if (week) q.set("week_start", week);
+  if (weeks > 1) q.set("weeks", String(weeks));
+  const wq = q.toString() ? `?${q}` : "";
   const me = await apiFetch<User>("/me");
   const manager = me.role !== "member";
 
@@ -31,10 +41,29 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const d = data.data;
   const rows = team.ok ? team.data.rows.filter((r) => r.role !== "admin") : [];
 
-  // Last week, only to show the change on the team tiles.
-  const prev = await tryFetch<{ rows: TeamWeekRow[] }>(
-    `/team-week?week_start=${addDays(d.week_start, -7)}`,
-  );
+  /* A day either side of the API's today, so whichever day it is in the
+     reader's own zone falls inside the window; TodayInterviews narrows it to
+     their real local day once it knows the browser's zone. Taken from the
+     API's date rather than the clock, so rendering stays pure. */
+  const from = `${addDays(d.today, -1)}T00:00:00.000Z`;
+  const to = `${addDays(d.today, 2)}T00:00:00.000Z`;
+
+  /* The whole displayed week, for the outcome donut. Saturday + 1 day so the
+     range covers every instant of the final day whatever the reader's zone. */
+  const weekFrom = `${addDays(d.week_start, -7 * (weeks - 1))}T00:00:00.000Z`;
+  const weekTo = `${addDays(d.week_end, 1)}T00:00:00.000Z`;
+
+  /* The period before this one, only to show the change on the team tiles.
+     It has to be the same length, or the comparison is meaningless. */
+  const prevQs = new URLSearchParams({ week_start: addDays(d.week_start, -7 * weeks) });
+  if (weeks > 1) prevQs.set("weeks", String(weeks));
+
+  // Last period, only to show the change on the team tiles.
+  const [prev, todays, weekIvs] = await Promise.all([
+    tryFetch<{ rows: TeamWeekRow[] }>(`/team-week?${prevQs}`),
+    tryFetch<Interview[]>(`/interviews?from=${from}&to=${to}`),
+    tryFetch<Interview[]>(`/interviews?from=${weekFrom}&to=${weekTo}`),
+  ]);
   const prevRows = prev.ok ? prev.data.rows.filter((r) => r.role !== "admin") : null;
 
   return (
@@ -51,9 +80,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           weekStart={d.week_start}
           weekEnd={d.week_end}
           today={d.today}
+          weeks={weeks}
           trailing={
             manager ? (
-              <a className="chip" href={`/api/proxy/export.csv?week_start=${d.week_start}`}>
+              <a
+                className="chip"
+                href={`/api/proxy/export.csv?week_start=${d.week_start}${weeks > 1 ? `&weeks=${weeks}` : ""}`}
+              >
                 CSV
               </a>
             ) : null
@@ -61,14 +94,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         />
       </div>
 
+      <TodayInterviews interviews={todays.ok ? todays.data : []} />
+
       {rows.length > 0 ? <TeamTiles rows={rows} prevRows={prevRows} /> : null}
       {me.role !== "admin" ? <StatTiles data={d} /> : null}
 
       {rows.length > 0 ? (
         <div className="two" style={{ marginBottom: 12 }}>
           <div className="panel">
-            <h2 className="panel-title">Team overview</h2>
-            <TeamStatusDonut rows={rows} />
+            <h2 className="panel-title">Interview outcomes</h2>
+            <TeamInterviewDonut interviews={weekIvs.ok ? weekIvs.data : []} />
           </div>
           <div className="panel">
             <h2 className="panel-title">Team daily score</h2>
@@ -95,16 +130,6 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         ) : (
           <PointsChart rows={rows} meId={me.id} week={d.week_start} />
         )}
-      </div>
-
-      <div style={{ marginBottom: 12 }}>
-        <Accordion title="Team results">
-          {!team.ok ? (
-            <div className="banner error">{team.error}</div>
-          ) : (
-            <TeamWeekTable me={me} weekStart={d.week_start} rows={rows} metrics={d.metrics} />
-          )}
-        </Accordion>
       </div>
 
       {me.role !== "admin" && (

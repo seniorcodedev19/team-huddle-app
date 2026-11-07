@@ -55,9 +55,9 @@ export default async function AdminHistoryPage({ searchParams }: { searchParams:
         <table>
           <thead>
             <tr>
-              <th>When</th>
-              <th>Who</th>
-              <th>What</th>
+              <th>Date</th>
+              <th>User</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>

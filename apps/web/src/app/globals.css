@@ -480,6 +480,26 @@ h2 {
 .filters .icon-btn:disabled, .filters .icon-btn[aria-disabled="true"] { opacity: 0.35; cursor: not-allowed; }
 .filters-form { display: contents; }
 
+/* A bare icon button, for toolbars outside .filters (the calendar's week
+   arrows). The .filters rules above are more specific, so those keep their
+   own flatter treatment; this gives everyone else real chrome instead of the
+   browser default, matching .btn secondary beside it. */
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  /* Square, and the same height as a .btn secondary beside it, so the
+     calendar's Today button and week arrows sit on one line. */
+  width: 41px; height: 41px; padding: 0;
+  font: inherit; color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+.icon-btn:hover { background: var(--raise); border-color: var(--line-strong); }
+.icon-btn:focus-visible { outline: none; box-shadow: 0 0 0 2.5px var(--accent-ring); }
+.icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
 /* ---------- people ---------- */
 .person { display: inline-flex; align-items: center; gap: 9px; min-width: 0; }
 .person-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
@@ -2438,8 +2458,23 @@ button.chip.toggle:focus-visible { outline: none; box-shadow: 0 0 0 2.5px var(--
 }
 .cal-range { margin: 0 0 0 6px; font-size: 16px; font-weight: 600; letter-spacing: -0.02em; }
 
-.cal-head, .cal-grid { display: grid; grid-template-columns: 56px repeat(7, minmax(0, 1fr)); }
-.cal-head { border-bottom: 1px solid var(--line); background: var(--surface); }
+/* Day headers and the hour grid are ONE grid, not two.
+
+   They used to be siblings with matching grid-template-columns, but the body
+   scrolls and the header does not, so the scrollbar narrowed only the body's
+   1fr columns: the two rows drifted ~2px per day and by Saturday a header sat
+   over its neighbour's column. scrollbar-gutter does not fix that — it only
+   reserves space on an actual scroll container, which the header is not.
+   Sharing one grid makes the columns impossible to disagree on, and also
+   keeps the header locked to the body during horizontal scroll on mobile. */
+.cal-grid {
+  display: grid;
+  grid-template-columns: 56px repeat(7, minmax(0, 1fr));
+  grid-auto-rows: min-content;
+}
+/* Row 1 is the header: sticky, above the events, opaque so they scroll under. */
+.cal-corner, .cal-dayhead { position: sticky; top: 0; z-index: 4; background: var(--surface); }
+.cal-corner, .cal-dayhead { border-bottom: 1px solid var(--line); }
 .cal-dayhead {
   display: flex; align-items: center; justify-content: center; gap: 6px;
   padding: 8px 4px; font-size: 12.5px; color: var(--muted);
@@ -2452,8 +2487,11 @@ button.chip.toggle:focus-visible { outline: none; box-shadow: 0 0 0 2.5px var(--
   background: var(--accent); color: var(--accent-ink);
 }
 
-.cal-grid { max-height: 62vh; overflow-y: auto; position: relative; }
-.cal-gutter { position: relative; }
+.cal-grid { max-height: 62vh; overflow: auto; position: relative; }
+/* The hour gutter stays put when the grid scrolls sideways on narrow screens;
+   the corner sits above both sticky axes. */
+.cal-gutter { position: sticky; left: 0; z-index: 5; background: var(--surface); }
+.cal-corner { z-index: 6; left: 0; }
 .cal-hour {
   display: block; position: relative;
   font-size: 11px; color: var(--muted); text-align: right; padding-right: 8px;
@@ -2514,8 +2552,291 @@ button.chip.toggle:focus-visible { outline: none; box-shadow: 0 0 0 2.5px var(--
 
 @media (max-width: 860px) {
   .cal { grid-template-columns: minmax(0, 1fr); }
-  .cal-head, .cal-grid { grid-template-columns: 44px repeat(7, minmax(78px, 1fr)); }
-  /* Below this the columns are unreadable, so the grid scrolls sideways. */
-  .cal-main { overflow-x: auto; }
-  .cal-head, .cal-grid { min-width: 590px; }
+  /* Below this the columns are unreadable, so the grid scrolls sideways.
+     The grid is its own horizontal scroller, so the sticky header row scrolls
+     with it and stays over the right days. */
+  .cal-grid { grid-template-columns: 44px repeat(7, minmax(78px, 1fr)); }
+  .cal-grid > * { min-width: 0; }
+}
+
+/* ---------- new interview dialog ---------- */
+/* The base .modal scrolls as a whole and carries its own padding. This
+   dialog instead pins its header and footer and scrolls only the fields
+   between them, so it needs that padding and that scrolling turned off —
+   otherwise the two nest and the whole dialog, title bar included, slides
+   under an outer scrollbar. */
+.modal-event {
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(86dvh, 760px);
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.modal-event .modal-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  flex: none; margin: 0;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--line);
+}
+/* The only scrolling region. min-height:0 lets a flex child actually shrink. */
+.modal-event .modal-body {
+  flex: 1 1 auto; min-height: 0;
+  padding: 14px 18px; overflow-y: auto;
+}
+.modal-event label { display: block; margin-bottom: 5px; }
+.modal-event input, .modal-event textarea { width: 100%; }
+.modal-event textarea { resize: vertical; }
+/* Date, start and end sit on one row, wrapping together on narrow screens. */
+.ne-times { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 10px; }
+.ne-client { grid-template-columns: 1fr 1fr; }
+.ne-check { display: flex; align-items: center; gap: 8px; margin: 0; }
+.ne-check input { width: auto; }
+.modal-foot {
+  display: flex; justify-content: flex-end; gap: 8px;
+  flex: none;
+  padding: 12px 18px; border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+/* The calendar's week arrows set .icon-btn to 41px to match a button beside
+   them; a dialog's close control is its own size. */
+.modal-event .modal-head .icon-btn { width: 30px; height: 30px; flex: none; }
+/* Delete sits apart from Cancel/Save so it is not fallen into by accident. */
+.modal-foot .ghost-danger { margin-right: auto; }
+.btn.ghost-danger {
+  background: none;
+  border-color: transparent;
+  color: var(--danger);
+  box-shadow: none;
+}
+.btn.ghost-danger:hover { background: var(--danger-wash); border-color: var(--danger); }
+/* Armed: the next click really deletes, so it reads as solid. */
+.btn.ghost-danger.on { background: var(--danger-wash); border-color: var(--danger); font-weight: 600; }
+@media (max-width: 560px) {
+  .ne-times, .ne-client { grid-template-columns: 1fr; }
+}
+
+/* ---------- dashboard: today's interviews ---------- */
+.today-empty {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: 8px; padding: 34px 20px;
+  border: 1px dashed var(--line-strong); border-radius: var(--r-lg);
+  color: var(--muted);
+}
+.today-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; margin-bottom: 4px;
+  border-radius: 50%;
+  background: var(--accent); color: var(--accent-ink);
+}
+.today-empty strong { color: var(--ink); font-size: 14.5px; }
+.today-empty p { margin: 0; max-width: 42ch; font-size: 13px; line-height: 1.5; }
+.today-empty a { color: var(--ink); font-size: 13px; text-decoration: underline; }
+
+.today-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.today-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--canvas);
+}
+/* A fixed column keeps the titles lined up down the list. */
+.today-time { flex: none; width: 124px; font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.today-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.today-text strong { font-size: 13.5px; font-weight: 500; }
+.today-text .small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.today-link { flex: none; font-size: 12.5px; color: var(--ink); text-decoration: underline; }
+
+@media (max-width: 560px) {
+  .today-item { align-items: flex-start; flex-wrap: wrap; }
+  .today-time { width: auto; }
+}
+
+/* ---------- calendar: month view ---------- */
+.cal-month {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  /* A header row, then six week rows of equal height. */
+  grid-template-rows: auto repeat(6, minmax(92px, 1fr));
+}
+.cal-mhead {
+  padding: 8px 4px; text-align: center;
+  font-size: 12.5px; color: var(--muted);
+  border-bottom: 1px solid var(--line); border-left: 1px solid var(--line);
+}
+.cal-mhead:first-of-type { border-left: 0; }
+.cal-mcell {
+  display: flex; flex-direction: column; gap: 3px;
+  min-width: 0; padding: 4px;
+  border-left: 1px solid var(--line); border-bottom: 1px solid var(--line);
+}
+.cal-mcell:nth-child(7n + 1) { border-left: 0; }
+/* Days either side of the month stay visible but recede. */
+.cal-mcell.outside { background: var(--canvas); }
+.cal-mcell.outside .cal-mdate { color: var(--muted); opacity: 0.6; }
+
+.cal-mdate {
+  align-self: flex-start;
+  min-width: 23px; height: 23px; padding: 0 5px;
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--ink);
+  background: none; border: 0; border-radius: 999px;
+  cursor: pointer;
+}
+.cal-mdate:hover { background: var(--raise); }
+.cal-mdate:focus-visible { outline: none; box-shadow: 0 0 0 2.5px var(--accent-ring); }
+.cal-mcell.today .cal-mdate { background: var(--accent); color: var(--accent-ink); }
+
+.cal-mevents { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cal-mevent {
+  display: flex; align-items: center; gap: 5px;
+  width: 100%; padding: 2px 5px;
+  font: inherit; font-size: 11.5px; text-align: left;
+  color: var(--ink);
+  background: none; border: 0; border-radius: 4px;
+  cursor: pointer; overflow: hidden;
+}
+.cal-mevent:hover { background: color-mix(in srgb, currentColor 16%, var(--surface)); }
+.cal-mevent:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent-ring); }
+.cal-mdot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.cal-mtime { color: var(--muted); flex: none; font-variant-numeric: tabular-nums; }
+.cal-mtitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.cal-mevent.status-cancelled { opacity: 0.5; }
+.cal-mevent.status-cancelled .cal-mtitle { text-decoration: line-through; }
+.cal-mmore { padding: 0 5px; font-size: 11px; color: var(--muted); }
+
+/* The Week/Month switch sits at the far end of the toolbar. */
+.cal-viewswitch { margin-left: auto; }
+
+@media (max-width: 860px) {
+  /* Dates only below this: three events in a 48px-wide cell is unreadable. */
+  .cal-month { grid-template-rows: auto repeat(6, minmax(58px, 1fr)); }
+  .cal-mtime, .cal-mtitle, .cal-mmore { display: none; }
+  .cal-mevent { justify-content: center; padding: 1px; }
+  .cal-mevents { flex-direction: row; flex-wrap: wrap; gap: 3px; padding-left: 2px; }
+}
+
+/* ---------- week picker ---------- */
+/* Arrows, a preset dropdown and a date-range pill on one line. Replaces the
+   old .filters row; .filters styles its children flat, which fought the
+   pill's own chrome. */
+.weekpick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* The preset is a fixed width so the pill beside it does not shuffle sideways
+   as the selected label changes length. */
+.weekpick-preset { width: 148px; }
+.weekpick .icon-btn { width: 36px; height: 36px; }
+
+.wrp { position: relative; display: inline-flex; }
+.wrp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+.wrp-pill:hover { background: var(--raise); }
+.wrp-pill.open,
+.wrp-pill:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2.5px var(--accent-ring);
+}
+.wrp-pill svg { color: var(--muted); flex: none; }
+
+/* Portalled to <body>, so it is positioned from the trigger's viewport rect. */
+.wrp-panel {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  width: 560px;
+  /* The side padding is the arrows' gutter: they are absolutely positioned
+     at the panel edges, so without it they sit on top of the day cells. */
+  padding: 14px 30px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lift);
+}
+.wrp-month { flex: 1 1 0; min-width: 0; }
+.wrp-mtitle {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--ink);
+}
+.wrp-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px 0;
+}
+.wrp-dow {
+  padding: 2px 0 6px;
+  font-size: 11.5px;
+  text-align: center;
+  color: var(--muted);
+}
+.wrp-day {
+  padding: 0;
+  height: 28px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.wrp-day:hover:not(:disabled):not(.inweek) { background: var(--raise); border-radius: var(--r-sm); }
+.wrp-day.outside { color: var(--muted); opacity: 0.55; }
+.wrp-day:disabled { opacity: 0.3; cursor: not-allowed; }
+/* The selected week reads as one continuous bar across its row, with the
+   ends rounded — hence the separate edge rules rather than a radius on each. */
+.wrp-day.inweek { background: var(--accent-wash); }
+.wrp-day.edge.start { border-radius: var(--r-sm) 0 0 var(--r-sm); }
+.wrp-day.edge.end { border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+.wrp-day.inweek.edge { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.wrp-day.today:not(.inweek) { font-weight: 700; color: var(--accent); }
+.wrp-day:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent-ring); border-radius: var(--r-sm); }
+
+/* The month arrows sit just inside the panel's edges, vertically centred. */
+.wrp-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 30px;
+  font: inherit;
+  font-size: 17px;
+  line-height: 1;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.wrp-nav:hover { color: var(--ink); background: var(--raise); }
+.wrp-nav:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent-ring); }
+.wrp-nav.prev { left: 4px; }
+.wrp-nav.next { right: 4px; }
+
+@media (max-width: 620px) {
+  /* One month at a time below this; two will not fit. */
+  .wrp-panel { width: min(320px, calc(100vw - 16px)); }
+  .wrp-panel .wrp-month + .wrp-month { display: none; }
 }

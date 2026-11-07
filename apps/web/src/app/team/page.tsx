@@ -1,25 +1,39 @@
+import Accordion from "@/components/Accordion";
 import QuerySelect from "@/components/QuerySelect";
 import TeamAchievements from "@/components/TeamAchievements";
+import TeamWeekTable from "@/components/TeamWeekTable";
 import WeekPicker from "@/components/WeekPicker";
 import { apiFetch, tryFetch } from "@/lib/api";
 import { todayUtc, weekParam } from "@/lib/dates";
-import type { Team, TeamWeekRow, User } from "@/lib/types";
+import type { Metric, Team, TeamWeekRow, User } from "@/lib/types";
 
 export default async function TeamPage({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string; team?: string }>;
+  searchParams: Promise<{ week?: string; team?: string; weeks?: string }>;
 }) {
   const sp = await searchParams;
   const week = weekParam(sp.week);
+  const weeks = Math.min(Math.max(Number(sp.weeks) || 1, 1), 13);
   const me = await apiFetch<User>("/me");
 
   const teams = me.role === "admin" ? await apiFetch<Team[]>("/teams") : [];
   const teamId = me.role === "admin" && sp.team ? Number(sp.team) : undefined;
-  const qs = [week ? `week_start=${week}` : "", teamId ? `team_id=${teamId}` : ""].filter(Boolean).join("&");
-  const res = await tryFetch<{ week_start: string; week_end: string; rows: TeamWeekRow[] }>(
-    `/team-week${qs ? `?${qs}` : ""}`,
-  );
+  const qs = [
+    week ? `week_start=${week}` : "",
+    teamId ? `team_id=${teamId}` : "",
+    weeks > 1 ? `weeks=${weeks}` : "",
+  ]
+    .filter(Boolean)
+    .join("&");
+  /* The results table takes the metric list so a metric nobody has points for
+     still gets a column; without it the columns come only from the rows. */
+  const [res, mets] = await Promise.all([
+    tryFetch<{ week_start: string; week_end: string; rows: TeamWeekRow[] }>(
+      `/team-week${qs ? `?${qs}` : ""}`,
+    ),
+    tryFetch<Metric[]>("/metrics"),
+  ]);
 
   if (!res.ok) return <div className="banner error">{res.error}</div>;
 
@@ -40,6 +54,7 @@ export default async function TeamPage({
           weekStart={res.data.week_start}
           weekEnd={res.data.week_end}
           today={todayUtc()}
+          weeks={weeks}
           extra={extra}
           trailing={
             <>
@@ -67,6 +82,17 @@ export default async function TeamPage({
       </div>
 
       <TeamAchievements me={me} weekStart={res.data.week_start} rows={res.data.rows} />
+
+      <div style={{ marginTop: 12 }}>
+        <Accordion title="Team results">
+          <TeamWeekTable
+            me={me}
+            weekStart={res.data.week_start}
+            rows={res.data.rows}
+            metrics={mets.ok ? mets.data : undefined}
+          />
+        </Accordion>
+      </div>
     </>
   );
 }

@@ -21,6 +21,13 @@ export const shortDay = (s: string) => fmtUtc(s, { weekday: "short" });
 export const dayMonth = (s: string) => fmtUtc(s, { month: "short", day: "numeric" });
 export const weekLabel = (start: string, end: string) => `${dayMonth(start)} to ${dayMonth(end)}`;
 
+/* "Nov 2 - Nov 8, 2026", the week-picker pill's label. The year is stated
+   once at the end, and only the months differ when a week straddles two. */
+export function rangeLabel(start: string, end: string): string {
+  const y = fmtUtc(end, { year: "numeric" });
+  return `${dayMonth(start)} - ${dayMonth(end)}, ${y}`;
+}
+
 export function recentWeeks(today: string, count = 26): { start: string; end: string }[] {
   const thisWeek = weekStartOf(today);
   return Array.from({ length: count }, (_, i) => {

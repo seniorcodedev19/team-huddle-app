@@ -165,16 +165,31 @@ export interface TimeWeek {
   by_day: number[];
   total_minutes: number;
 }
+/** A scheduled meeting between one of our profiles and an outside client. */
 export interface Interview {
   id: number;
-  member_id: number;
+  /** The profile being interviewed. Null on rows from the old internal 1:1. */
+  profile_id: number | null;
+  profile_name: string | null;
+  profile_email: string | null;
+  /** The client side. They have no account here, so this is plain text. */
+  client_name: string;
+  client_email: string;
+  /** Null for a profile-and-client interview; set on old internal 1:1 rows. */
+  member_id: number | null;
+  /** Whoever booked it. */
   interviewer_id: number;
   scheduled_at: string;
+  /** Null on rows predating end times. */
+  ends_at: string | null;
+  all_day: boolean;
+  /** Room or meeting link. "" when none was given. */
+  location: string;
   topic: string;
-  status: "scheduled" | "done" | "cancelled";
+  status: "scheduled" | "done" | "passed" | "failed" | "cancelled";
   notes: string | null;
-  member_name: string;
-  member_email: string;
+  member_name: string | null;
+  member_email: string | null;
   member_avatar?: string | null;
   interviewer_name: string;
   interviewer_email: string;
