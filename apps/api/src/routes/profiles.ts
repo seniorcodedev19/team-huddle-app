@@ -40,6 +40,7 @@ const profileSql = `
          coalesce(
            (select json_agg(json_build_object(
               'id', ta.id,
+              'card_no', ta.card_no,
               'site_id', ta.site_id,
               'site_name', ts.name,
               'status', ta.status,
@@ -437,7 +438,7 @@ profiles.get(
          from profiles p where p.for_ai_training order by p.full_name`,
       ),
       pool.query(
-        `select ta.id, ta.profile_id, ta.site_id, ta.status, ta.account_email, ta.note, ta.updated_at
+        `select ta.id, ta.card_no, ta.profile_id, ta.site_id, ta.status, ta.account_email, ta.note, ta.updated_at
          from training_accounts ta`,
       ),
     ]);
@@ -468,7 +469,7 @@ profiles.put(
          note = excluded.note,
          updated_by = excluded.updated_by,
          updated_at = now()
-       returning id, profile_id, site_id, status, account_email, note, updated_at`,
+       returning id, card_no, profile_id, site_id, status, account_email, note, updated_at`,
       [b.profile_id, b.site_id, b.status, b.account_email, b.note, actor.id],
     );
     await audit(actor.id, "update", "training_account", rows[0].id, { status: b.status });
@@ -483,6 +484,256 @@ profiles.delete(
     const { rowCount } = await pool.query("delete from training_accounts where id=$1", [id]);
     if (!rowCount) throw new HttpError(404, "Account not found");
     await audit(req.user!.id, "delete", "training_account", id);
+    res.json({ ok: true });
+  }),
+);
+
+
+/* ---------- board cards ---------- */
+
+/* A card is one training_accounts row: the (profile, site) pairing the board
+   shows. It is addressed by card_no, not by id — the number in TRN-184 and in
+   the card's URL — so a link keeps meaning something after the row behind it
+   is replaced. */
+const cardSql = `
+  select ta.id, ta.card_no, ta.status, ta.account_email, ta.note,
+         ta.created_at, ta.updated_at,
+         ta.profile_id, p.full_name as profile_name,
+         ta.site_id, ts.name as site_name, ts.url as site_url,
+         ts.summary as site_summary, ts.icon_url as site_icon_url,
+         (select json_build_object(
+            'user_id', u.id,
+            'name', coalesce(nullif(u.name,''), u.email),
+            'email', u.email,
+            'avatar', u.avatar)
+          from users u where u.id = ta.updated_by) as updated_by,
+         coalesce(
+           (select json_agg(json_build_object(
+              'user_id', u.id,
+              'name', coalesce(nullif(u.name,''), u.email),
+              'email', u.email,
+              'avatar', u.avatar
+            ) order by coalesce(nullif(u.name,''), u.email))
+            from profile_assignees pa join users u on u.id = pa.user_id
+            where pa.profile_id = ta.profile_id),
+           '[]'::json) as assignees
+  from training_accounts ta
+  join profiles p on p.id = ta.profile_id
+  join training_sites ts on ts.id = ta.site_id`;
+
+async function cardByNo(cardNo: number) {
+  const { rows } = await pool.query(`${cardSql} where ta.card_no = $1`, [cardNo]);
+  if (!rows[0]) throw new HttpError(404, "That card doesn't exist");
+  return rows[0];
+}
+
+profiles.get(
+  "/cards/:cardNo",
+  h(async (req, res) => {
+    const cardNo = Number(req.params.cardNo);
+    /* A non-numeric path segment would otherwise reach Postgres as NaN and
+       come back as a type error rather than a plain not-found. */
+    if (!Number.isInteger(cardNo) || cardNo < 1) throw new HttpError(404, "That card doesn't exist");
+    res.json(await cardByNo(cardNo));
+  }),
+);
+
+/* Editing a card from its modal or detail page. Every field is optional: the
+   status dropdown and the note save independently, as they do on the board. */
+const cardPatch = z
+  .object({
+    status: z.enum(TRAINING_STATUSES),
+    account_email: z.string().trim().email("must be a valid email").max(160).or(z.literal("")),
+    note: z.string().trim().max(500),
+  })
+  .partial();
+
+profiles.patch(
+  "/cards/:cardNo",
+  h(async (req, res) => {
+    const actor = req.user!;
+    const cardNo = Number(req.params.cardNo);
+    if (!Number.isInteger(cardNo) || cardNo < 1) throw new HttpError(404, "That card doesn't exist");
+    const b = cardPatch.parse(req.body);
+
+    const before = await cardByNo(cardNo);
+
+    const { rowCount } = await pool.query(
+      `update training_accounts set
+         status        = coalesce($2, status),
+         account_email = coalesce($3, account_email),
+         note          = coalesce($4, note),
+         updated_by    = $5,
+         updated_at    = now()
+       where card_no = $1`,
+      [cardNo, b.status ?? null, b.account_email ?? null, b.note ?? null, actor.id],
+    );
+    if (!rowCount) throw new HttpError(404, "That card doesn't exist");
+
+    /* Record the status move specifically, with both ends of it: the activity
+       feed reads "moved TRN-184 from Created to Approved", which it cannot do
+       from the new value alone. */
+    const detail: Record<string, unknown> = { card_no: cardNo };
+    if (b.status && b.status !== before.status) {
+      detail.from = before.status;
+      detail.to = b.status;
+    }
+    await audit(actor.id, b.status && b.status !== before.status ? "move" : "update", "card", cardNo, detail);
+
+    res.json(await cardByNo(cardNo));
+  }),
+);
+
+/* ---------- card comments ---------- */
+
+const commentSql = `
+  select c.id, c.body, c.mentions, c.created_at, c.edited_at,
+         json_build_object(
+           'user_id', u.id,
+           'name', coalesce(nullif(u.name,''), u.email),
+           'email', u.email,
+           'avatar', u.avatar) as author
+  from card_comments c
+  join users u on u.id = c.author_id`;
+
+/** The card's row id, or a 404. Comments hang off the id, not the card_no. */
+async function accountIdOf(cardNo: number) {
+  if (!Number.isInteger(cardNo) || cardNo < 1) throw new HttpError(404, "That card doesn't exist");
+  const { rows } = await pool.query("select id from training_accounts where card_no=$1", [cardNo]);
+  if (!rows[0]) throw new HttpError(404, "That card doesn't exist");
+  return rows[0].id as number;
+}
+
+profiles.get(
+  "/cards/:cardNo/comments",
+  h(async (req, res) => {
+    const accountId = await accountIdOf(Number(req.params.cardNo));
+    const { rows } = await pool.query(
+      `${commentSql} where c.account_id = $1 order by c.created_at, c.id`,
+      [accountId],
+    );
+    res.json(rows);
+  }),
+);
+
+profiles.post(
+  "/cards/:cardNo/comments",
+  h(async (req, res) => {
+    const actor = req.user!;
+    const cardNo = Number(req.params.cardNo);
+    const accountId = await accountIdOf(cardNo);
+    const b = z
+      .object({
+        body: z.string().trim().min(1, "Write something first").max(4000),
+        /* The ids the @ picker resolved. Validated against real users below,
+           so a hand-made request cannot attach someone who was never named. */
+        mentions: z.array(z.number().int()).max(20).default([]),
+      })
+      .parse(req.body);
+
+    let mentions: number[] = [];
+    if (b.mentions.length) {
+      const { rows } = await pool.query(
+        "select id from users where active and id = any($1::int[])",
+        [b.mentions],
+      );
+      mentions = rows.map((r) => r.id as number);
+    }
+
+    const { rows } = await pool.query(
+      `insert into card_comments (account_id, author_id, body, mentions)
+       values ($1,$2,$3,$4) returning id`,
+      [accountId, actor.id, b.body, mentions],
+    );
+
+    await audit(actor.id, "comment", "card", cardNo, {
+      card_no: cardNo,
+      comment_id: rows[0].id,
+      mentions,
+    });
+
+    const { rows: back } = await pool.query(`${commentSql} where c.id = $1`, [rows[0].id]);
+    res.status(201).json(back[0]);
+  }),
+);
+
+/* Who the @ picker offers. Active users only: a comment naming someone who
+   has left would notify nobody. */
+profiles.get(
+  "/mentionables",
+  h(async (_req, res) => {
+    const { rows } = await pool.query(
+      `select id as user_id, coalesce(nullif(name,''), email) as name, email, avatar
+       from users where active order by coalesce(nullif(name,''), email)`,
+    );
+    res.json(rows);
+  }),
+);
+
+/* Editing and deleting a comment.
+
+   Only the author may change their own words. An admin may delete any
+   comment — moderation — but never edit one, because an edit under someone
+   else's name misrepresents them. */
+async function ownComment(actor: Express.Request["user"], id: number) {
+  const { rows } = await pool.query(
+    `select c.id, c.author_id, ta.card_no
+     from card_comments c join training_accounts ta on ta.id = c.account_id
+     where c.id = $1`,
+    [id],
+  );
+  if (!rows[0]) throw new HttpError(404, "That comment doesn't exist");
+  return rows[0] as { id: number; author_id: number; card_no: number };
+}
+
+profiles.patch(
+  "/comments/:id",
+  h(async (req, res) => {
+    const actor = req.user!;
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) throw new HttpError(404, "That comment doesn't exist");
+    const row = await ownComment(actor, id);
+    if (row.author_id !== actor.id) throw new HttpError(403, "You can only edit your own comments");
+
+    const b = z
+      .object({
+        body: z.string().trim().min(1, "Write something first").max(4000),
+        mentions: z.array(z.number().int()).max(20).default([]),
+      })
+      .parse(req.body);
+
+    let mentions: number[] = [];
+    if (b.mentions.length) {
+      const { rows } = await pool.query(
+        "select id from users where active and id = any($1::int[])",
+        [b.mentions],
+      );
+      mentions = rows.map((r) => r.id as number);
+    }
+
+    await pool.query(
+      "update card_comments set body=$2, mentions=$3, edited_at=now() where id=$1",
+      [id, b.body, mentions],
+    );
+    await audit(actor.id, "update", "comment", id, { card_no: row.card_no });
+
+    const { rows: back } = await pool.query(`${commentSql} where c.id = $1`, [id]);
+    res.json(back[0]);
+  }),
+);
+
+profiles.delete(
+  "/comments/:id",
+  h(async (req, res) => {
+    const actor = req.user!;
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) throw new HttpError(404, "That comment doesn't exist");
+    const row = await ownComment(actor, id);
+    if (row.author_id !== actor.id && actor.role !== "admin") {
+      throw new HttpError(403, "You can only delete your own comments");
+    }
+    await pool.query("delete from card_comments where id=$1", [id]);
+    await audit(actor.id, "delete", "comment", id, { card_no: row.card_no });
     res.json({ ok: true });
   }),
 );

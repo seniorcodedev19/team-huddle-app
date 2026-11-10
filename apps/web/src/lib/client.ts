@@ -26,15 +26,24 @@ export async function call(
 /* Like call(), but hands back the parsed response. For the few endpoints that
    answer with data the browser needs rather than just succeeding — reading a
    site's metadata before anything is saved. Rejects so the caller can catch. */
-export async function callJson<T>(method: string, path: string, body?: unknown): Promise<T> {
+export async function callJson<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  /* Lets a caller cancel in an effect cleanup. An aborted fetch rejects, so
+     the caller checks signal.aborted before showing the error. */
+  signal?: AbortSignal,
+): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`/api/proxy${path}`, {
       method,
       headers: { "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
     });
-  } catch {
+  } catch (e) {
+    if (signal?.aborted) throw e;
     throw new Error("Network error. Try again.");
   }
   const j = await res.json().catch(() => ({}));

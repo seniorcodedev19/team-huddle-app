@@ -2,12 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { useAction } from "@/lib/client";
+import CardModal from "./CardModal";
 import Dropdown from "./Dropdown";
 import SiteLogo from "./SiteLogo";
 import { STATUS_LABEL, STATUS_TONE, STATUSES } from "@/lib/training";
-import type { TrainingMatrix as Matrix, TrainingStatus } from "@/lib/types";
+import { cardKey, type TrainingMatrix as Matrix, type TrainingStatus } from "@/lib/types";
 
 type Card = {
+  /** The board key: TRN-<cardNo>, and the card's URL. */
+  cardNo: number;
   profileId: number;
   profileName: string;
   /** Who owns the profile, for the assignee filter. */
@@ -33,6 +36,12 @@ export default function TrainingKanban({
   const { error, busy, run } = useAction();
   const [dragging, setDragging] = useState<Card | null>(null);
   const [over, setOver] = useState<TrainingStatus | null>(null);
+  /* Which card's modal is open, by card_no. */
+  const [openCard, setOpenCard] = useState<number | null>(null);
+  /* A drag ends with a click on most browsers, which would open the modal
+     every time a card is moved. Set while dragging and cleared after, so the
+     click that completes a drag is ignored. */
+  const [didDrag, setDidDrag] = useState(false);
   const { profileId, siteId, assignee } = filters;
 
   const profileName = useMemo(
@@ -48,6 +57,7 @@ export default function TrainingKanban({
   const cards: Card[] = useMemo(
     () =>
       matrix.accounts.map((a) => ({
+        cardNo: a.card_no,
         profileId: a.profile_id,
         profileName: profileName.get(a.profile_id) ?? "Unknown profile",
         assigneeIds: (assigneesOf.get(a.profile_id) ?? []).map((x) => x.user_id),
@@ -134,13 +144,29 @@ export default function TrainingKanban({
                       key={`${c.profileId}:${c.siteId}`}
                       className={`kanban-card${busy ? " busy" : ""}`}
                       draggable={!busy}
-                      onDragStart={() => setDragging(c)}
+                      onDragStart={() => {
+                        setDragging(c);
+                        setDidDrag(true);
+                      }}
                       onDragEnd={() => {
                         setDragging(null);
                         setOver(null);
                       }}
+                      onClick={(e) => {
+                        /* The status dropdown lives inside the card; a click
+                           on it is a status change, not a request to open. */
+                        if ((e.target as HTMLElement).closest(".dd")) return;
+                        if (didDrag) {
+                          setDidDrag(false);
+                          return;
+                        }
+                        setOpenCard(c.cardNo);
+                      }}
                     >
-                      <strong>{c.profileName}</strong>
+                      <header className="kanban-card-head">
+                        <strong>{c.profileName}</strong>
+                        <span className="kanban-key">{cardKey(c.cardNo)}</span>
+                      </header>
                       <span className="kanban-site">
                         <SiteLogo name={c.siteName} iconUrl={c.siteIcon} siteUrl={c.siteUrl} size={16} />
                         {c.siteName}
@@ -166,6 +192,10 @@ export default function TrainingKanban({
           );
         })}
       </div>
+
+      {openCard !== null && (
+        <CardModal cardNo={openCard} onClose={() => setOpenCard(null)} />
+      )}
     </>
   );
 }

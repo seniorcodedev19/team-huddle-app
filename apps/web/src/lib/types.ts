@@ -274,6 +274,8 @@ export interface ProfileAssignee {
 }
 export interface TrainingAccount {
   id: number;
+  /** The board key, shown as TRN-<card_no>. Stable and never reused. */
+  card_no: number;
   site_id: number;
   site_name: string;
   status: TrainingStatus;
@@ -329,6 +331,7 @@ export interface TrainingMatrix {
   profiles: { id: number; full_name: string; assignees: ProfileAssignee[] }[];
   accounts: {
     id: number;
+    card_no: number;
     profile_id: number;
     site_id: number;
     status: TrainingStatus;
@@ -345,4 +348,41 @@ export interface ProfilePerson {
   avatar: string | null;
   /** Bidders are assignable but left out of all weekly metrics views. */
   is_bidder: boolean;
+}
+
+/** One board card: a (profile, site) pairing, addressed by its card_no. */
+export interface BoardCard {
+  id: number;
+  card_no: number;
+  status: TrainingStatus;
+  account_email: string;
+  note: string;
+  created_at: string;
+  updated_at: string;
+  profile_id: number;
+  profile_name: string;
+  site_id: number;
+  site_name: string;
+  site_url: string;
+  site_summary: string;
+  site_icon_url: string;
+  /** Who last touched it, or null if that user has since been removed. */
+  updated_by: ProfileAssignee | null;
+  /** The profile's assignees — a card has no assignee of its own. */
+  assignees: ProfileAssignee[];
+}
+
+/** TRN-184. One place, so the prefix is not spelled out across components. */
+export const CARD_PREFIX = "TRN";
+export const cardKey = (cardNo: number) => `${CARD_PREFIX}-${cardNo}`;
+
+/** A comment on a board card. */
+export interface CardComment {
+  id: number;
+  body: string;
+  /** User ids named with @, resolved when the comment was written. */
+  mentions: number[];
+  created_at: string;
+  edited_at: string | null;
+  author: ProfileAssignee;
 }
