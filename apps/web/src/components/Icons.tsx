@@ -136,12 +136,15 @@ export function Icon({
           <rect x="17.5" y="10.5" width="3" height="8.5" rx="1" />
         </svg>
       );
+    /* A four-point spark with a small second spark: the current shorthand for
+       AI, and it reads at 15px where the old robot head's three dots and
+       antenna muddied together. Both sparks are generated geometry, centred by
+       construction rather than by eye. */
     case "agent":
       return (
         <svg {...common}>
-          <rect x="4" y="6" width="16" height="12" rx="3" />
-          <path d="M8 10h.01M12 10h.01M16 10h.01" />
-          <path d="M9 18v3l3-3" />
+          <path d="M11.2 4.8 Q12.83 10.77 18.8 12.4 Q12.83 14.03 11.2 20 Q9.57 14.03 3.6 12.4 Q9.57 10.77 11.2 4.8Z" />
+          <path d="M18.4 3.6v3.2M20 5.2h-3.2" />
         </svg>
       );
     case "logout":

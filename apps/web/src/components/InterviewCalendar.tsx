@@ -95,7 +95,11 @@ export default function InterviewCalendar({
   const [view, setView] = useState<"week" | "month">("week");
   const [anchor, setAnchor] = useState(() => startOfWeek(new Date()));
   /** Profile ids switched off in the side list. */
-  const [hidden, setHidden] = useState<Set<number>>(new Set());
+  /* Which profiles the grid is narrowed to. Empty means no narrowing, so
+     everything shows — the useful default, and the only sensible starting
+     point when nothing has been picked yet. Picking profiles shows those
+     and only those; picking them all again is the same as picking none. */
+  const [picked, setPicked] = useState<Set<number>>(new Set());
   const [now, setNow] = useState(() => new Date());
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -146,7 +150,7 @@ export default function InterviewCalendar({
     () =>
       interviews.filter((i) => {
         const pid = i.profile_id ?? (i.member_id === null ? undefined : profileOfUser.get(i.member_id));
-        if (pid !== undefined && hidden.has(pid)) return false;
+        if (picked.size > 0 && (pid === undefined || !picked.has(pid))) return false;
         if (fProfile && pid !== fProfile) return false;
         if (fKind && i.kind !== fKind) return false;
         /* "User" is whoever the event involves on our side: the profile's
@@ -158,35 +162,54 @@ export default function InterviewCalendar({
         }
         return true;
       }),
-    [interviews, hidden, profileOfUser, fProfile, fKind, fUser, assigneesOf],
+    [interviews, picked, profileOfUser, fProfile, fKind, fUser, assigneesOf],
   );
 
 
   /* Lay events out per day. Overlapping events split the column width between
      them, the way a calendar does, rather than stacking out of sight. */
   const byDay = useMemo(() => {
-    const map = new Map<number, { ev: Interview; at: Date; col: number; of: number }[]>();
+    const map = new Map<
+      number,
+      { ev: Interview; at: Date; mins: number; col: number; of: number }[]
+    >();
     for (const d of days) map.set(d.getTime(), []);
     for (const ev of shown) {
       const at = new Date(ev.scheduled_at);
       const key = days.find((d) => sameDay(d, at))?.getTime();
       if (key === undefined) continue;
-      map.get(key)!.push({ ev, at, col: 0, of: 1 });
+      /* The block's height is its real length, so a 30-minute meeting is
+         half the height of an hour one. An all-day event fills the day, and
+         a row from before end times were stored falls back to an hour. */
+      const end = ev.ends_at ? new Date(ev.ends_at) : null;
+      const mins = ev.all_day
+        ? 24 * 60
+        : end && end > at
+          ? (end.getTime() - at.getTime()) / 60_000
+          : 60;
+      map.get(key)!.push({ ev, at, mins, col: 0, of: 1 });
     }
     for (const list of map.values()) {
       list.sort((a, b) => a.at.getTime() - b.at.getTime());
-      // A simple sweep: events starting within an hour of each other share a row.
+      /* Events share a row only when they genuinely overlap in time. The old
+         sweep assumed every event was an hour long, so two consecutive
+         half-hour meetings were split into narrow columns although neither
+         covered the other. */
       let group: typeof list = [];
+      let groupEnd = 0;
       const flush = () => {
         group.forEach((g, i) => {
           g.col = i;
           g.of = group.length;
         });
         group = [];
+        groupEnd = 0;
       };
       for (const item of list) {
-        if (group.length && item.at.getTime() - group[0].at.getTime() >= 3_600_000) flush();
+        const start = item.at.getTime();
+        if (group.length && start >= groupEnd) flush();
         group.push(item);
+        groupEnd = Math.max(groupEnd, start + item.mins * 60_000);
       }
       flush();
     }
@@ -222,7 +245,22 @@ export default function InterviewCalendar({
     <div className="cal">
       <aside className="cal-side">
         <div className="panel cal-legend">
-          <h2 className="panel-title">Profiles</h2>
+          {/* The count says what the grid is showing, since a selection of
+              one or two is easy to forget about when the rest of the page
+              looks empty. Clearing it is one click away. */}
+          <div className="cal-people-head">
+            <h2 className="panel-title">Profiles</h2>
+            {picked.size > 0 && (
+              <button
+                className="btn secondary small"
+                type="button"
+                onClick={() => setPicked(new Set())}
+                title="Show every profile again"
+              >
+                Clear ({picked.size})
+              </button>
+            )}
+          </div>
           {/* The list scrolls, not the panel: the heading stays put and the
               scrollbar runs beside the names rather than the whole card. */}
           <div className="cal-people">
@@ -232,19 +270,29 @@ export default function InterviewCalendar({
               </p>
             ) : (
               profiles.map((p) => (
-                <label className="cal-person" key={p.id}>
-                  <input
-                    type="checkbox"
-                    checked={!hidden.has(p.id)}
-                    onChange={() =>
-                      setHidden((s) => {
-                        const next = new Set(s);
-                        if (next.has(p.id)) next.delete(p.id);
-                        else next.add(p.id);
-                        return next;
-                      })
-                    }
-                  />
+                /* The row itself is the control, so there is no checkbox: the
+                   dot fills in and the name lifts when a profile is picked.
+                   With nothing picked every row sits grey, which matches the
+                   grid showing everything. */
+                <button
+                  className="cal-person"
+                  type="button"
+                  key={p.id}
+                  aria-pressed={picked.has(p.id)}
+                  title={
+                    picked.has(p.id)
+                      ? `Stop showing only ${p.full_name}`
+                      : `Show only ${p.full_name}`
+                  }
+                  onClick={() =>
+                    setPicked((s) => {
+                      const next = new Set(s);
+                      if (next.has(p.id)) next.delete(p.id);
+                      else next.add(p.id);
+                      return next;
+                    })
+                  }
+                >
                   <span className={`cal-dot s${colourOf.get(p.id) ?? 0}`} aria-hidden="true" />
                   <span className="cal-person-text">
                     <strong>{p.full_name}</strong>
@@ -254,7 +302,7 @@ export default function InterviewCalendar({
                         : p.assignees.map((a) => a.name).join(", ")}
                     </span>
                   </span>
-                </label>
+                </button>
               ))
             )}
           </div>
@@ -438,14 +486,19 @@ export default function InterviewCalendar({
                 />
               )}
 
-              {(byDay.get(d.getTime()) ?? []).map(({ ev, at, col, of }) => (
+              {(byDay.get(d.getTime()) ?? []).map(({ ev, at, mins, col, of }) => (
                 <button
                   type="button"
                   key={ev.id}
                   className={`cal-event s${colourForEvent(ev)} status-${ev.status}`}
+                  data-short={mins <= 30 || undefined}
                   style={{
                     top: (at.getHours() + at.getMinutes() / 60) * HOUR_PX,
-                    height: HOUR_PX - 4,
+                    /* Scaled to the real duration, less a 2px gap so stacked
+                       blocks do not touch. A 30-minute event is therefore
+                       exactly half an hour block. The 18px floor only catches
+                       shorter events, where the time would be unreadable. */
+                    height: Math.max(18, (mins / 60) * HOUR_PX - 2),
                     left: `${(col / of) * 100}%`,
                     width: `${100 / of}%`,
                   }}

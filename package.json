@@ -1,7 +1,7 @@
 {
   "name": "team-huddle-app",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.1.1",
   "workspaces": ["apps/*"],
   "scripts": {
     "dev": "npm-run-all --parallel dev:api dev:web",

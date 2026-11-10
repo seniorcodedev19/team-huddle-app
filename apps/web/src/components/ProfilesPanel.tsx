@@ -551,27 +551,45 @@ export default function ProfilesPanel({
             </div>
           </div>
 
+          {/* Delete sits first, hard left; the save and cancel pair is pushed
+              to the right, so the destructive button is nowhere near the one
+              you reach for every time. */}
           <div className="row" style={{ marginTop: 14, gap: 8 }}>
-            <button className="btn" type="button" onClick={save} disabled={busy}>
-              {editing === "new" ? "Create profile" : "Save changes"}
-            </button>
-            <button className="btn secondary" type="button" onClick={() => setEditing(null)} disabled={busy}>
-              Cancel
-            </button>
             {editing !== "new" && (
               <button
                 className="btn danger"
                 type="button"
-                style={{ marginLeft: "auto" }}
                 onClick={() => {
                   const p = profiles.find((x) => x.id === editing);
-                  if (p) remove(p);
+                  if (!p) return;
+                  /* Deleting takes the profile's assignees, bidder and
+                     training accounts with it, so it asks once first. */
+                  if (
+                    !window.confirm(
+                      `Delete ${p.full_name}? This also removes their training accounts and cannot be undone.`,
+                    )
+                  ) {
+                    return;
+                  }
+                  remove(p);
                 }}
                 disabled={busy}
               >
                 Delete
               </button>
             )}
+            <button
+              className="btn secondary"
+              type="button"
+              style={{ marginLeft: "auto" }}
+              onClick={() => setEditing(null)}
+              disabled={busy}
+            >
+              Cancel
+            </button>
+            <button className="btn" type="button" onClick={save} disabled={busy}>
+              {editing === "new" ? "Create profile" : "Save changes"}
+            </button>
           </div>
         </div>
       )}

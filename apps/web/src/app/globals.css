@@ -130,6 +130,113 @@ a { color: inherit; }
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
 
+/* ---------- scrollbars ---------- */
+/* One slim scrollbar for every scrolling surface. Styling each container
+   separately had already drifted — two implementations, only one of them with
+   Firefox support or a hover state — so this is the single definition. A new
+   scroller opts in by adding `.scroll-thin`, or by joining the lists below
+   when the class cannot be reached from the markup.
+
+   The lists are written out rather than nested or wrapped in `:is()`. Both
+   are tidier in source, but the compiler turns nesting INTO `:is()`, and
+   WebKit drops a `::-webkit-scrollbar` rule whose subject sits inside it —
+   which would silently return every bar here to the OS default. Keep them
+   explicit; add a new selector to all four lists. */
+.scroll-thin,
+.side,
+.tablewrap,
+.modal,
+.modal-event .modal-body,
+.agent-threads,
+.agent-log,
+.profile-accounts,
+.kanban,
+.dd-sheet,
+.cal-people,
+.cal-grid,
+.trend.people {
+  /* Firefox has no ::-webkit pseudo-elements; these two are the equivalent. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+.scroll-thin::-webkit-scrollbar,
+.side::-webkit-scrollbar,
+.tablewrap::-webkit-scrollbar,
+.modal::-webkit-scrollbar,
+.modal-event .modal-body::-webkit-scrollbar,
+.agent-threads::-webkit-scrollbar,
+.agent-log::-webkit-scrollbar,
+.profile-accounts::-webkit-scrollbar,
+.kanban::-webkit-scrollbar,
+.dd-sheet::-webkit-scrollbar,
+.cal-people::-webkit-scrollbar,
+.cal-grid::-webkit-scrollbar,
+.trend.people::-webkit-scrollbar { width: 8px; height: 8px; }
+/* The track, and the square where two bars meet, stay invisible. */
+.scroll-thin::-webkit-scrollbar-track,
+.side::-webkit-scrollbar-track,
+.tablewrap::-webkit-scrollbar-track,
+.modal::-webkit-scrollbar-track,
+.modal-event .modal-body::-webkit-scrollbar-track,
+.agent-threads::-webkit-scrollbar-track,
+.agent-log::-webkit-scrollbar-track,
+.profile-accounts::-webkit-scrollbar-track,
+.kanban::-webkit-scrollbar-track,
+.dd-sheet::-webkit-scrollbar-track,
+.cal-people::-webkit-scrollbar-track,
+.cal-grid::-webkit-scrollbar-track,
+.trend.people::-webkit-scrollbar-track,
+.scroll-thin::-webkit-scrollbar-corner,
+.side::-webkit-scrollbar-corner,
+.tablewrap::-webkit-scrollbar-corner,
+.modal::-webkit-scrollbar-corner,
+.modal-event .modal-body::-webkit-scrollbar-corner,
+.agent-threads::-webkit-scrollbar-corner,
+.agent-log::-webkit-scrollbar-corner,
+.profile-accounts::-webkit-scrollbar-corner,
+.kanban::-webkit-scrollbar-corner,
+.dd-sheet::-webkit-scrollbar-corner,
+.cal-people::-webkit-scrollbar-corner,
+.cal-grid::-webkit-scrollbar-corner,
+.trend.people::-webkit-scrollbar-corner { background: transparent; }
+/* Drawn at 8px but inset by a transparent border and clipped to the padding
+   box, so it reads as a 4px bar with breathing room, not a slab against the
+   content. */
+.scroll-thin::-webkit-scrollbar-thumb,
+.side::-webkit-scrollbar-thumb,
+.tablewrap::-webkit-scrollbar-thumb,
+.modal::-webkit-scrollbar-thumb,
+.modal-event .modal-body::-webkit-scrollbar-thumb,
+.agent-threads::-webkit-scrollbar-thumb,
+.agent-log::-webkit-scrollbar-thumb,
+.profile-accounts::-webkit-scrollbar-thumb,
+.kanban::-webkit-scrollbar-thumb,
+.dd-sheet::-webkit-scrollbar-thumb,
+.cal-people::-webkit-scrollbar-thumb,
+.cal-grid::-webkit-scrollbar-thumb,
+.trend.people::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.scroll-thin::-webkit-scrollbar-thumb:hover,
+.side::-webkit-scrollbar-thumb:hover,
+.tablewrap::-webkit-scrollbar-thumb:hover,
+.modal::-webkit-scrollbar-thumb:hover,
+.modal-event .modal-body::-webkit-scrollbar-thumb:hover,
+.agent-threads::-webkit-scrollbar-thumb:hover,
+.agent-log::-webkit-scrollbar-thumb:hover,
+.profile-accounts::-webkit-scrollbar-thumb:hover,
+.kanban::-webkit-scrollbar-thumb:hover,
+.dd-sheet::-webkit-scrollbar-thumb:hover,
+.cal-people::-webkit-scrollbar-thumb:hover,
+.cal-grid::-webkit-scrollbar-thumb:hover,
+.trend.people::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+  background-clip: padding-box;
+}
+
 /* ---------- shell + sidebar ---------- */
 .shell {
   display: grid;
@@ -1983,11 +2090,6 @@ textarea { width: 100%; min-height: 80px; resize: vertical; line-height: 1.5; }
 }
 /* An empty list must not leave a gap above the add button. */
 .profile-accounts:empty { display: none; }
-.profile-accounts::-webkit-scrollbar { width: 8px; }
-.profile-accounts::-webkit-scrollbar-thumb {
-  background: var(--line-strong); border-radius: 999px;
-}
-.profile-accounts::-webkit-scrollbar-track { background: transparent; }
 
 /* Status chips, tinted per state. */
 .chips { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -2465,29 +2567,42 @@ button.chip.toggle:focus-visible { outline: none; box-shadow: 0 0 0 2.5px var(--
   /* Room for the bar so it never sits on top of a name. */
   padding-right: 6px;
   margin-right: -6px;
-  /* Firefox has no ::-webkit pseudo-elements; this is the equivalent. */
-  scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
 }
-/* Slim and quiet, matching .profile-accounts rather than the OS default,
-   which is wide and heavy against a 252px panel. */
-.cal-people::-webkit-scrollbar { width: 8px; }
-.cal-people::-webkit-scrollbar-track { background: transparent; }
-.cal-people::-webkit-scrollbar-thumb {
-  background: var(--line-strong);
-  border-radius: 999px;
-  /* Inset by a transparent border so the thumb reads as 4px, not 8px. */
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-.cal-people::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: padding-box; }
 .cal-legend { padding: 14px; }
+/* The heading and the show-all control share a row; the heading's own bottom
+   margin would otherwise push the button out of line with it. */
+.cal-people-head {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 12px;
+}
+.cal-people-head .panel-title { margin: 0; flex: 1; min-width: 0; }
+/* A full-width toggle, not a checkbox row: the whole name is the hit area. */
 .cal-person {
   display: flex; align-items: center; gap: 8px;
-  padding: 5px 0; cursor: pointer; min-width: 0;
+  width: 100%; padding: 5px 6px; margin: 0; cursor: pointer; min-width: 0;
+  background: none; border: 0; border-radius: var(--r-sm);
+  color: inherit; font: inherit; text-align: left;
 }
-.cal-person input { margin: 0; }
-.cal-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.cal-person:hover { background: var(--raise); }
+.cal-person:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: -2px; }
+/* Unpicked is the resting state, so it is quiet rather than struck out: a
+   hollow grey dot and muted text. Nothing is being excluded — with no
+   selection the grid shows every profile. */
+.cal-person[aria-pressed="false"] .cal-dot {
+  background: transparent !important;
+  box-shadow: inset 0 0 0 1.5px var(--line-strong);
+}
+.cal-person[aria-pressed="false"] .cal-person-text strong { color: var(--muted); font-weight: 500; }
+/* Picked reads as on: the dot fills with the profile's own series colour,
+   the name darkens, and the row sits on a tinted plate so a selection of two
+   out of twenty is obvious at a glance. */
+.cal-person[aria-pressed="true"] { background: var(--accent-wash); }
+.cal-person[aria-pressed="true"]:hover { background: var(--accent-wash); filter: brightness(1.04); }
+.cal-person[aria-pressed="true"] .cal-person-text strong { color: var(--ink); font-weight: 600; }
+.cal-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex: none;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
 .cal-person-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
 .cal-person-text strong { font-size: 13px; font-weight: 500; }
 .cal-person-text .small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2588,6 +2703,11 @@ button.chip.toggle:focus-visible { outline: none; box-shadow: 0 0 0 2.5px var(--
   color: inherit; opacity: 0.75; font-size: 11px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* A half-hour block is one line tall, so the topic is dropped rather than
+   clipped mid-letter; the tooltip still carries it. Tighter padding keeps
+   the time on that single line. */
+.cal-event[data-short] { padding-top: 1px; padding-bottom: 1px; }
+.cal-event[data-short] .cal-event-sub { display: none; }
 /* A cancelled interview stays visible but reads as struck through. */
 .cal-event.status-cancelled { opacity: 0.55; }
 .cal-event.status-cancelled .cal-event-title { text-decoration: line-through; }

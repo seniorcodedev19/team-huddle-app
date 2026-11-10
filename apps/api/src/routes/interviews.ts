@@ -102,7 +102,9 @@ interviews.post("/interviews", requireRole("manager", "admin"), h(async (req, re
     })
     .parse(req.body);
 
-  if (b.profile_id === undefined && b.member_id === undefined) {
+  /* An interview is always of someone, so it needs a subject. A plain event
+     is a team happening with no subject at all, so it may have neither. */
+  if (b.kind !== "event" && b.profile_id === undefined && b.member_id === undefined) {
     throw new HttpError(400, "Choose a profile for this interview");
   }
   if (b.ends_at && new Date(b.ends_at) <= new Date(b.scheduled_at)) {

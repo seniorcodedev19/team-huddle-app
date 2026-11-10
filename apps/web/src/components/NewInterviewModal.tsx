@@ -52,9 +52,12 @@ export default function NewInterviewModal({
   /* When editing, every field starts from the stored event; the times are
      read back into local wall clock, the same way they were entered. */
   const startedAt = editing ? new Date(editing.scheduled_at) : at;
+  /* A new event runs 30 minutes unless the user says otherwise. Most
+     bookings here are short, and stretching a half-hour meeting to an hour
+     by default made every block look longer than it was. */
   const endedAt = editing?.ends_at
     ? new Date(editing.ends_at)
-    : new Date(startedAt.getTime() + 3_600_000);
+    : new Date(startedAt.getTime() + 30 * 60_000);
 
   const [profileId, setProfileId] = useState(
     String(editing?.profile_id ?? defaultProfileId ?? profiles[0]?.id ?? ""),
@@ -88,7 +91,8 @@ export default function NewInterviewModal({
 
   const submit = async () => {
     setLocalError(null);
-    if (!profileId) {
+    /* An event has no subject, so it needs no profile. Interviews do. */
+    if (!profileId && kind !== "event") {
       setLocalError("Choose which profile this interview is for.");
       return;
     }
@@ -103,7 +107,7 @@ export default function NewInterviewModal({
       return;
     }
     const body = {
-      profile_id: Number(profileId),
+      ...(profileId ? { profile_id: Number(profileId) } : {}),
       topic: title.trim() || "Interview",
       scheduled_at: startAt.toISOString(),
       ends_at: endAt.toISOString(),
@@ -156,23 +160,32 @@ export default function NewInterviewModal({
 
         <div className="modal-body stack">
           <div>
-            <label htmlFor="ne-profile">Profile</label>
+            <label htmlFor="ne-profile">
+              Profile {kind === "event" && <span className="muted small">(optional)</span>}
+            </label>
             {profiles.length === 0 ? (
               <p className="muted small" style={{ margin: 0 }}>
-                No profiles yet — add one before scheduling an interview.
+                {kind === "event"
+                  ? "No profiles yet. An event does not need one."
+                  : "No profiles yet — add one before scheduling an interview."}
               </p>
             ) : (
               <Dropdown<string>
                 id="ne-profile"
                 ariaLabel="Profile"
                 value={profileId}
-                placeholder="Choose a profile…"
+                placeholder={kind === "event" ? "No profile" : "Choose a profile…"}
                 onChange={setProfileId}
-                options={profiles.map((p) => ({
-                  value: String(p.id),
-                  label: p.full_name,
-                  hint: p.email || undefined,
-                }))}
+                options={[
+                  /* An event is a team happening, so it can stand on its own.
+                     Interviews always have a subject, so no blank option. */
+                  ...(kind === "event" ? [{ value: "", label: "No profile" }] : []),
+                  ...profiles.map((p) => ({
+                    value: String(p.id),
+                    label: p.full_name,
+                    hint: p.email || undefined,
+                  })),
+                ]}
               />
             )}
           </div>
