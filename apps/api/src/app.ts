@@ -5,6 +5,7 @@ import { publicAuth } from "./routes/auth";
 import { core } from "./routes/core";
 import { interviews } from "./routes/interviews";
 import { metrics } from "./routes/metrics";
+import { notifications } from "./routes/notifications";
 import { profiles } from "./routes/profiles";
 import { time } from "./routes/time";
 import { week } from "./routes/week";
@@ -37,6 +38,7 @@ app.use(week);
 app.use(time);
 app.use(interviews);
 app.use(profiles);
+app.use(notifications);
 app.use(agent);
 app.use(errorHandler);
 

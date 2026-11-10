@@ -1,5 +1,6 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { z, ZodError } from "zod";
+import { bus } from "./bus";
 import { pool } from "./db";
 import { validDate } from "./dates";
 
@@ -33,15 +34,48 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   res.status(500).json({ error: "Server error" });
 }
 
+/* Records what happened, and optionally who should be told.
+
+   `notify` is the only new part: an audit_log row with no recipients is a
+   plain audit entry, as every existing call site produces. One with
+   recipients is a notification. Returns the activity id so a caller can
+   publish it on the live bus. */
 export async function audit(
   actorId: number | null,
   action: string,
   entity: string,
   entityId: string | number | null,
   detail?: unknown,
-) {
-  await pool.query(
-    "insert into audit_log (actor_id, action, entity, entity_id, detail) values ($1,$2,$3,$4,$5)",
+  notify?: number[],
+): Promise<number> {
+  const { rows } = await pool.query(
+    "insert into audit_log (actor_id, action, entity, entity_id, detail) values ($1,$2,$3,$4,$5) returning id",
     [actorId, action, entity, entityId === null ? null : String(entityId), detail ? JSON.stringify(detail) : null],
   );
+  const activityId = Number(rows[0].id);
+
+  if (notify?.length) {
+    /* Two rules enforced here rather than at each call site, so no caller can
+       get them wrong: nobody is notified of their own action, and a user
+       named twice is still one recipient. */
+    const to = [...new Set(notify)].filter((id) => id !== actorId);
+    if (to.length) {
+      /* Best-effort. The action itself has already happened and been
+         audited; failing to tell someone about it must not turn a saved
+         comment into an error for the person who wrote it. Logged, so a
+         broken notification path is still visible. */
+      try {
+        await pool.query(
+          `insert into activity_recipients (activity_id, user_id)
+           select $1, unnest($2::int[])
+           on conflict do nothing`,
+          [activityId, to],
+        );
+        bus.publish(to, activityId);
+      } catch (err) {
+        console.error("notify failed for activity", activityId, err);
+      }
+    }
+  }
+  return activityId;
 }

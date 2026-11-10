@@ -386,3 +386,34 @@ export interface CardComment {
   edited_at: string | null;
   author: ProfileAssignee;
 }
+
+/* ---------- notifications (migration 027) ---------- */
+
+/** One audit_log row the viewer was named on. The sentence is composed in
+    the browser from these parts; nothing here is display text. */
+export interface NotificationItem {
+  id: number;
+  action: string;
+  entity: string;
+  entity_id: string | null;
+  detail: Record<string, unknown> | null;
+  at: string;
+  read_at: string | null;
+  /** Fields are null when whoever did it has since been removed. */
+  actor: { user_id: number | null; name: string | null; email: string | null; avatar: string | null };
+}
+export interface NotificationFeed {
+  items: NotificationItem[];
+  unread: number;
+}
+/** A row of the admin Activity tab: an audited action on a card or comment,
+    with the names of whoever was notified about it. */
+export interface ActivityItem extends Omit<NotificationItem, "read_at"> {
+  notified: string[];
+}
+export interface ActivityPage {
+  rows: ActivityItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}

@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { callJson } from "@/lib/client";
 import type { CardComment, ProfileAssignee } from "@/lib/types";
 import Avatar from "./Avatar";
+import ConfirmDialog from "./ConfirmDialog";
+import TimeAgo from "./TimeAgo";
 
 /* The comment thread on a card, with an @ picker in the composer.
 
@@ -20,6 +22,10 @@ export default function CardComments({ cardNo }: { cardNo: number }) {
   const [menuFor, setMenuFor] = useState<number | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
+  /* The comment awaiting a delete confirmation, and whether the delete is
+     in flight. */
+  const [deleting, setDeleting] = useState<number | null>(null);
+  const [removing, setRemoving] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -160,15 +166,17 @@ export default function CardComments({ cardNo }: { cardNo: number }) {
   };
 
   const remove = async (id: number) => {
-    if (!window.confirm("Delete this comment? This cannot be undone.")) return;
     setError(null);
+    setRemoving(true);
     try {
       await callJson<{ ok: true }>("DELETE", `/comments/${id}`);
       setItems((list) => (list ?? []).filter((c) => c.id !== id));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't delete that comment");
+    } finally {
+      setRemoving(false);
+      setDeleting(null);
     }
-    setMenuFor(null);
   };
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -283,9 +291,7 @@ export default function CardComments({ cardNo }: { cardNo: number }) {
               <div className="comment-text">
                 <p className="comment-meta">
                   <strong>{c.author.name}</strong>
-                  <span className="muted small" title={new Date(c.created_at).toLocaleString()}>
-                    {ago(c.created_at)}
-                  </span>
+                  <TimeAgo className="muted small" iso={c.created_at} />
                   {c.edited_at && <span className="muted small">(edited)</span>}
                   {me && (c.author.user_id === me.id || me.role === "admin") && (
                     <span className="comment-menu">
@@ -323,7 +329,10 @@ export default function CardComments({ cardNo }: { cardNo: number }) {
                             type="button"
                             role="menuitem"
                             className="danger"
-                            onClick={() => remove(c.id)}
+                            onClick={() => {
+                              setMenuFor(null);
+                              setDeleting(c.id);
+                            }}
                           >
                             Delete
                           </button>
@@ -368,6 +377,18 @@ export default function CardComments({ cardNo }: { cardNo: number }) {
         </ul>
       )}
 
+
+      {deleting !== null && (
+        <ConfirmDialog
+          title="Delete this comment?"
+          message="It will be removed for everyone on this card. This cannot be undone."
+          confirmLabel="Delete"
+          danger
+          busy={removing}
+          onConfirm={() => void remove(deleting)}
+          onCancel={() => setDeleting(null)}
+        />
+      )}
     </section>
   );
 }
@@ -419,15 +440,4 @@ function highlight(text: string, people: Map<string, ProfileAssignee>) {
    so the same name is the same colour everywhere it appears. */
 function colourOf(userId: number) {
   return userId % 6;
-}
-
-function ago(iso: string) {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
-  const mins = Math.round((Date.now() - then) / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }

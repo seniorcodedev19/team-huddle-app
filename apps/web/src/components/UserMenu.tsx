@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import Avatar from "./Avatar";
+import { NotificationPopover, UnreadBadge, useNotifications } from "./Notifications";
 import type { User } from "@/lib/types";
 
 type Theme = "light" | "dark";
@@ -17,7 +18,7 @@ function getTheme(): Theme {
   return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
 }
 
-function MenuIcon({ name }: { name: "settings" | "sun" | "moon" | "logout" }) {
+function MenuIcon({ name }: { name: "bell" | "settings" | "sun" | "moon" | "logout" }) {
   const common = {
     width: 16,
     height: 16,
@@ -29,6 +30,14 @@ function MenuIcon({ name }: { name: "settings" | "sun" | "moon" | "logout" }) {
     strokeLinejoin: "round" as const,
     "aria-hidden": true as const,
   };
+  if (name === "bell") {
+    return (
+      <svg {...common}>
+        <path d="M6 9.5a6 6 0 0 1 12 0c0 4.2 1.6 5.6 2 6.5H4c.4-.9 2-2.3 2-6.5Z" />
+        <path d="M10 19.5a2.2 2.2 0 0 0 4 0" />
+      </svg>
+    );
+  }
   if (name === "settings") {
     return (
       <svg {...common}>
@@ -64,6 +73,11 @@ function MenuIcon({ name }: { name: "settings" | "sun" | "moon" | "logout" }) {
    action form passed down, so sign-out stays on the server. */
 export default function UserMenu({ me, logout }: { me: User; logout: ReactNode }) {
   const [open, setOpen] = useState(false);
+  /* The notification panel is opened from this menu but is not part of it:
+     picking the item closes the menu and opens the panel beside the sidebar,
+     measured from this trigger at the moment of the click. */
+  const notif = useNotifications();
+  const [panelAt, setPanelAt] = useState<{ left: number; bottom: number } | null>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const theme = useSyncExternalStore(subscribeTheme, getTheme, () => "light" as Theme);
@@ -102,6 +116,32 @@ export default function UserMenu({ me, logout }: { me: User; logout: ReactNode }
     <div className="usermenu" ref={wrap}>
       {open ? (
         <div className="usermenu-sheet" role="menu" aria-label="Account">
+          {notif && (
+            <button
+              type="button"
+              className="usermenu-item"
+              role="menuitem"
+              onClick={() => {
+                const r = wrap.current?.getBoundingClientRect();
+                /* Clear of the sidebar itself, not of this menu: the menu
+                   sits inside the sidebar's padding, so its own edge would
+                   leave the panel overlapping the sidebar. */
+                const side = wrap.current?.closest(".side")?.getBoundingClientRect();
+                setOpen(false);
+                if (r) {
+                  setPanelAt({
+                    left: (side ?? r).right + 10,
+                    bottom: Math.max(12, window.innerHeight - r.bottom),
+                  });
+                }
+              }}
+            >
+              <MenuIcon name="bell" />
+              <span>Notifications</span>
+              <UnreadBadge count={notif.unread} />
+            </button>
+          )}
+
           <Link className="usermenu-item" href="/profile" role="menuitem" onClick={() => setOpen(false)}>
             <MenuIcon name="settings" />
             <span>Settings</span>
@@ -131,11 +171,22 @@ export default function UserMenu({ me, logout }: { me: User; logout: ReactNode }
         type="button"
         ref={trigger}
         className="who usermenu-trigger"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          setPanelAt(null);
+          setOpen((v) => !v);
+        }}
         aria-expanded={open}
         aria-haspopup="menu"
       >
-        <Avatar name={me.name} email={me.email} src={me.avatar} size={40} />
+        <span className="usermenu-avatar">
+          <Avatar name={me.name} email={me.email} src={me.avatar} size={40} />
+          {/* The count itself is inside the menu, so without a mark out here
+              an unread notification would be invisible until someone
+              happened to open it. */}
+          {notif && notif.unread > 0 && (
+            <span className="usermenu-unread" aria-label={`${notif.unread} unread notifications`} />
+          )}
+        </span>
         <span className="who-meta">
           <strong>{me.name || me.email}</strong>
           {me.role}
@@ -155,6 +206,8 @@ export default function UserMenu({ me, logout }: { me: User; logout: ReactNode }
           </svg>
         </span>
       </button>
+
+      {panelAt && <NotificationPopover pos={panelAt} anchor={wrap} onClose={() => setPanelAt(null)} />}
     </div>
   );
 }

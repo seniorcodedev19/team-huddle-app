@@ -578,16 +578,39 @@ profiles.patch(
       detail.from = before.status;
       detail.to = b.status;
     }
-    await audit(actor.id, b.status && b.status !== before.status ? "move" : "update", "card", cardNo, detail);
+    /* Only a status move is worth a notification. Editing a note or an
+       account email is not something anyone needs told about. */
+    const moved = Boolean(b.status && b.status !== before.status);
+    await audit(
+      actor.id,
+      moved ? "move" : "update",
+      "card",
+      cardNo,
+      detail,
+      moved ? await watchersOfCard(cardNo) : undefined,
+    );
 
     res.json(await cardByNo(cardNo));
   }),
 );
 
+/* Who to tell about a card: the profile's assignees. A card has no assignee
+   of its own, so this is the only answer available. */
+async function watchersOfCard(cardNo: number): Promise<number[]> {
+  const { rows } = await pool.query(
+    `select pa.user_id
+     from training_accounts ta
+     join profile_assignees pa on pa.profile_id = ta.profile_id
+     where ta.card_no = $1`,
+    [cardNo],
+  );
+  return rows.map((r) => r.user_id as number);
+}
+
 /* ---------- card comments ---------- */
 
 const commentSql = `
-  select c.id, c.body, c.mentions, c.created_at, c.edited_at,
+  select c.id::int as id, c.body, c.mentions, c.created_at, c.edited_at,
          json_build_object(
            'user_id', u.id,
            'name', coalesce(nullif(u.name,''), u.email),
@@ -646,11 +669,18 @@ profiles.post(
       [accountId, actor.id, b.body, mentions],
     );
 
-    await audit(actor.id, "comment", "card", cardNo, {
-      card_no: cardNo,
-      comment_id: rows[0].id,
-      mentions,
-    });
+    /* Assignees hear about every comment on their card; anyone named with
+       @ hears about it whether or not the card is theirs. audit() drops the
+       author and de-duplicates, so the overlap costs nothing. */
+    const watchers = await watchersOfCard(cardNo);
+    await audit(
+      actor.id,
+      "comment",
+      "card",
+      cardNo,
+      { card_no: cardNo, comment_id: rows[0].id, mentions, excerpt: b.body.slice(0, 140) },
+      [...watchers, ...mentions],
+    );
 
     const { rows: back } = await pool.query(`${commentSql} where c.id = $1`, [rows[0].id]);
     res.status(201).json(back[0]);

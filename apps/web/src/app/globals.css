@@ -319,6 +319,102 @@ a { color: inherit; }
   }
 }
 
+/* ---------- confirm dialog ---------- */
+
+/* Above the ordinary modal (60/61): a confirmation is often opened from
+   inside one. */
+.confirm-backdrop {
+  position: fixed; inset: 0; z-index: 80;
+  display: grid; place-items: center; padding: 16px;
+  background: color-mix(in srgb, #000 55%, transparent);
+  animation: backdrop-in 0.16s ease;
+}
+.confirm {
+  width: min(420px, 100%);
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px 14px;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lift);
+}
+.confirm-icon {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--accent-wash); color: var(--accent);
+}
+.confirm-icon.danger { background: var(--danger-wash); color: var(--danger); }
+.confirm-text h2 { margin: 2px 0 4px; font-size: 15px; font-weight: 600; letter-spacing: -0.012em; }
+.confirm-text p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+.confirm-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; }
+/* A filled destructive button, for the one place a delete is being
+   confirmed. The outlined .btn.danger stays the everyday style. */
+.btn.danger-solid { background: var(--danger); border-color: var(--danger); color: var(--accent-ink); }
+.btn.danger-solid:hover:not(:disabled) { filter: brightness(1.08); }
+
+/* ---------- notifications ---------- */
+
+/* The mark on the account avatar: the count lives inside the menu, so this
+   is what says there is something to open it for. */
+.usermenu-avatar { position: relative; display: inline-flex; flex: none; }
+.usermenu-unread {
+  position: absolute; top: -1px; right: -1px;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--danger); border: 2px solid var(--surface);
+}
+/* Pushed to the row's far edge; fixed width so 1 and 9+ occupy the same box. */
+.notif-badge {
+  margin-left: auto; min-width: 20px; height: 18px; padding: 0 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px; background: var(--accent); color: var(--accent-ink);
+  font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+/* Portalled to <body>, so it is not clipped by the sidebar's own scroll. */
+.notif-panel {
+  position: fixed; z-index: 60;
+  width: 380px; max-width: calc(100vw - 16px);
+  max-height: min(560px, calc(100dvh - 24px));
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line-strong); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lift);
+}
+.notif-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px 10px; border-bottom: 1px solid var(--line);
+}
+.notif-head h2 { margin: 0; flex: 1; font-size: 15px; font-weight: 600; letter-spacing: -0.012em; }
+.notif-toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.notif-list {
+  list-style: none; margin: 0; padding: 6px; min-height: 0; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent;
+}
+.notif-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  width: 100%; padding: 9px 10px; border: 0; border-radius: var(--r-md);
+  background: none; color: inherit; font: inherit; text-align: left;
+  text-decoration: none; cursor: pointer;
+}
+.notif-item:hover { background: var(--raise); }
+.notif-item.unread { background: var(--accent-wash); }
+.notif-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; font-size: 13px; line-height: 1.4; }
+.notif-extra { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notif-dot { width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--accent); flex: none; }
+.notif-empty { margin: 14px; }
+/* On the History page the list is the page, not a popover: no inner scroll. */
+.notif-list.notif-page { padding: 0; overflow: visible; }
+.notif-foot {
+  padding: 10px 12px; border-top: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.notif-alerts { display: flex; align-items: center; gap: 14px; }
+.notif-hint { margin: 0; padding: 0 14px 10px; }
+
+@media (max-width: 860px) {
+  /* The bell lives in the drawer here, so "beside the sidebar" means
+     nothing: the panel takes the top of the screen instead. */
+  .notif-panel { left: 8px !important; right: 8px; top: 64px; bottom: auto !important; width: auto; }
+}
+
 /* ---------- scrollbars ---------- */
 /* One slim scrollbar for every scrolling surface. Styling each container
    separately had already drifted — two implementations, only one of them with
@@ -2191,6 +2287,17 @@ textarea { width: 100%; min-height: 80px; resize: vertical; line-height: 1.5; }
   box-shadow: var(--shadow);
 }
 .viewswitch button:focus-visible { outline: none; box-shadow: 0 0 0 2.5px var(--accent-ring); }
+/* The same switch made of links, for a view that is chosen by the URL and
+   rendered on the server rather than toggled in the browser. */
+.viewswitch a {
+  font-size: 12.5px; font-weight: 500;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 11px; border-radius: var(--r-sm);
+  color: var(--muted); text-decoration: none;
+}
+.viewswitch a:hover { color: var(--ink); }
+.viewswitch a.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.viewswitch a:focus-visible { outline: none; box-shadow: 0 0 0 2.5px var(--accent-ring); }
 
 .profile-grid {
   display: grid;

@@ -8,6 +8,7 @@ import Avatar from "./Avatar";
 import CardComments from "./CardComments";
 import Dropdown from "./Dropdown";
 import SiteLogo from "./SiteLogo";
+import { LocalDate } from "./TimeAgo";
 
 /* The body of a board card: site notes and the account on the left, the
    metadata rail on the right.
@@ -98,13 +99,15 @@ export default function CardPanel({ card }: { card: BoardCard }) {
 
           <div>
             <h3 className="card-section">Created</h3>
-            <p className="muted small">{dateOf(card.created_at)}</p>
+            <p className="muted small">
+              <LocalDate iso={card.created_at} />
+            </p>
           </div>
 
           <div>
             <h3 className="card-section">Updated</h3>
             <p className="muted small">
-              {dateOf(card.updated_at)}
+              <LocalDate iso={card.updated_at} />
               {card.updated_by ? ` by ${card.updated_by.name}` : ""}
             </p>
           </div>
@@ -159,10 +162,4 @@ function hostOf(url: string) {
     // A site added by hand may hold something that isn't a URL.
     return url;
   }
-}
-
-function dateOf(iso: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }

@@ -10,6 +10,7 @@ import BusyShell from "@/components/Busy";
 import { Logo } from "@/components/Icons";
 import MobileNav from "@/components/MobileNav";
 import Nav from "@/components/Nav";
+import { NotificationProvider } from "@/components/Notifications";
 import ThemeToggle from "@/components/ThemeToggle";
 import { tryFetch } from "@/lib/api";
 import { navScript, themeScript } from "@/lib/theme-script";
@@ -39,14 +40,19 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <Suspense fallback={null}>
           <BusyShell>
             {me ? (
-              <div className="shell">
-                {/* MobileNav is inert above 860px: it only adds the top bar
-                    and drawer chrome, which CSS hides on wider screens. */}
-                <MobileNav>
-                  <Nav me={me} />
-                </MobileNav>
-                <main className="main">{children}</main>
-              </div>
+              /* One provider for the whole signed-in shell: the bell in the
+                 sidebar and anything else that wants the feed read the same
+                 list, fetched once. */
+              <NotificationProvider meId={me.id}>
+                <div className="shell">
+                  {/* MobileNav is inert above 860px: it only adds the top bar
+                      and drawer chrome, which CSS hides on wider screens. */}
+                  <MobileNav>
+                    <Nav me={me} />
+                  </MobileNav>
+                  <main className="main">{children}</main>
+                </div>
+              </NotificationProvider>
             ) : (
               <main className="main solo">
                 <div className="solo-head">
