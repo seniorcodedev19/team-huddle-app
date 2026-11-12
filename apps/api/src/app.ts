@@ -9,6 +9,7 @@ import { notifications } from "./routes/notifications";
 import { profiles } from "./routes/profiles";
 import { time } from "./routes/time";
 import { week } from "./routes/week";
+import { work } from "./routes/work";
 import { agent } from "./routes/agent";
 import { slackEvents } from "./routes/slackEvents";
 import { errorHandler } from "./util";
@@ -39,6 +40,7 @@ app.use(time);
 app.use(interviews);
 app.use(profiles);
 app.use(notifications);
+app.use(work);
 app.use(agent);
 app.use(errorHandler);
 

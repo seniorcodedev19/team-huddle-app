@@ -78,6 +78,39 @@ async function memberOf(id: number) {
   return rows[0] as { id: number; team_id: number | null };
 }
 
+/* Who should hear about a calendar event: the people the profile is
+   assigned to, and whoever booked it. audit() drops whoever is doing the
+   action, so the booker only hears about changes someone else makes. */
+async function eventAudience(profileId: number | null, bookedBy: number | null) {
+  const ids: number[] = [];
+  if (profileId !== null) {
+    const { rows } = await pool.query(
+      "select user_id from profile_assignees where profile_id=$1",
+      [profileId],
+    );
+    ids.push(...rows.map((r) => r.user_id as number));
+  }
+  if (bookedBy !== null) ids.push(bookedBy);
+  return ids;
+}
+
+type EventRow = {
+  topic: string;
+  kind: string;
+  status: string;
+  scheduled_at: Date;
+  profile_id: number | null;
+  interviewer_id: number | null;
+};
+
+async function eventRow(id: number): Promise<EventRow | null> {
+  const { rows } = await pool.query(
+    "select topic, kind, status, scheduled_at, profile_id, interviewer_id from interviews where id=$1",
+    [id],
+  );
+  return (rows[0] as EventRow) ?? null;
+}
+
 interviews.post("/interviews", requireRole("manager", "admin"), h(async (req, res) => {
   const actor = req.user!;
   /* An interview is a meeting between one of our profiles and an outside
@@ -139,10 +172,20 @@ interviews.post("/interviews", requireRole("manager", "admin"), h(async (req, re
      b.ends_at ?? null, b.all_day, b.location, b.notes || null,
      b.client_name, b.client_email],
   );
-  await audit(actor.id, "create", "interview", rows[0].id, {
-    profile_id: b.profile_id ?? null,
-    client_email: b.client_email || null,
-  });
+  await audit(
+    actor.id,
+    "create",
+    "interview",
+    rows[0].id,
+    {
+      profile_id: b.profile_id ?? null,
+      client_email: b.client_email || null,
+      topic: b.topic,
+      kind: b.kind,
+      scheduled_at: b.scheduled_at,
+    },
+    await eventAudience(b.profile_id ?? null, null),
+  );
   res.status(201).json(rows[0]);
 }));
 
@@ -189,6 +232,9 @@ interviews.patch("/interviews/:id", requireRole("manager", "admin"), h(async (re
     throw new HttpError(400, "The end time has to be after the start time");
   }
 
+  // Read before writing: the activity needs both ends of a change.
+  const before = await eventRow(id);
+
   await pool.query(
     `update interviews set
        scheduled_at = coalesce($2, scheduled_at),
@@ -208,7 +254,30 @@ interviews.patch("/interviews/:id", requireRole("manager", "admin"), h(async (re
      b.client_name ?? null, b.client_email ?? null, b.profile_id ?? null,
      b.kind ?? null],
   );
-  await audit(actor.id, "update", "interview", id, { status: b.status });
+  /* One edit, one line, named for what actually changed. The form sends
+     every field on every save, so "was a time sent" says nothing — the
+     values are compared. A cancellation outranks a reschedule: if both
+     happened, the meeting being off is the news. */
+  const topic = b.topic ?? before?.topic ?? "";
+  const kind = b.kind ?? before?.kind ?? "interview";
+  const cancelled = b.status === "cancelled" && before?.status !== "cancelled";
+  const moved =
+    Boolean(b.scheduled_at && before) &&
+    new Date(b.scheduled_at as string).getTime() !== before!.scheduled_at.getTime();
+
+  const detail: Record<string, unknown> = { status: b.status, topic, kind };
+  if (moved) {
+    detail.from = before!.scheduled_at.toISOString();
+    detail.to = b.scheduled_at;
+  }
+  await audit(
+    actor.id,
+    cancelled ? "cancel" : moved ? "reschedule" : "update",
+    "interview",
+    id,
+    detail,
+    await eventAudience(b.profile_id ?? before?.profile_id ?? null, before?.interviewer_id ?? null),
+  );
   res.json({ ok: true });
 }));
 
@@ -219,7 +288,17 @@ interviews.delete("/interviews/:id", requireRole("manager", "admin"), h(async (r
   const actor = req.user!;
   const id = Number(req.params.id);
   await assertMayEdit(actor, id);
+  // Read first: once the row is gone there is no topic left to name.
+  const before = await eventRow(id);
+  const audience = before ? await eventAudience(before.profile_id, before.interviewer_id) : [];
   await pool.query("delete from interviews where id=$1", [id]);
-  await audit(actor.id, "delete", "interview", id, {});
+  await audit(
+    actor.id,
+    "delete",
+    "interview",
+    id,
+    before ? { topic: before.topic, kind: before.kind } : {},
+    audience,
+  );
   res.json({ ok: true });
 }));

@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { momentLabel, type Described } from "@/lib/activity";
 import { ago } from "@/lib/ago";
 
 /* "5m ago", safe to render inside server-rendered pages.
@@ -48,4 +49,18 @@ export function LocalDate({ iso }: { iso: string }) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return <>—</>;
   return <>{d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}</>;
+}
+
+/* An activity's sentence. Most are plain text; a reschedule ends with two
+   times, and those are added only once live in the browser, for the same
+   reason as everything else in this file. Until then the line reads
+   complete without them. */
+export function ActivityText({ d }: { d: Described }) {
+  const ready = useSyncExternalStore(never, live, notLive);
+  return (
+    <>
+      {d.text}
+      {d.times && ready && ` from ${momentLabel(d.times.from)} to ${momentLabel(d.times.to)}`}
+    </>
+  );
 }

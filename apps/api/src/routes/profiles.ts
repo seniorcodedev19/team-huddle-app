@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireRole } from "../auth";
 import { pool } from "../db";
 import { csvLine, parseCsvObjects } from "../csv";
+import { openText, sealText } from "../crypto";
 import { fetchSiteMeta } from "../siteMeta";
 import { audit, h, HttpError } from "../util";
 
@@ -53,10 +54,20 @@ const profileSql = `
            '[]'::json) as accounts
   from profiles p`;
 
+/* Profile notes are stored encrypted (see crypto.ts) and decrypted here, on
+   the way out, so nothing past this point ever sees the stored form.
+   notes_locked is set when a note exists but cannot be read with the
+   current secret: the editor then leaves it alone rather than showing it as
+   empty and saving the emptiness over it. */
+function readable<T extends { notes: string }>(row: T): T & { notes_locked: boolean } {
+  const notes = openText(row.notes);
+  return { ...row, notes: notes ?? "", notes_locked: notes === null };
+}
+
 async function oneProfile(id: number) {
   const { rows } = await pool.query(`${profileSql} where p.id = $1`, [id]);
   if (!rows[0]) throw new HttpError(404, "Profile not found");
-  return rows[0];
+  return readable(rows[0]);
 }
 
 /* Minimal people list for the assignee picker. /users is manager+ only, but
@@ -83,7 +94,7 @@ profiles.get(
            where pa.profile_id = p.id and pa.user_id = $1) order by p.full_name`
       : `${profileSql} order by p.full_name`;
     const { rows } = await pool.query(sql, mine ? [req.user!.id] : []);
-    res.json(rows);
+    res.json(rows.map(readable));
   }),
 );
 
@@ -110,9 +121,14 @@ const profileBody = z.object({
   bidder_status: z.enum(BIDDER_STATUSES).optional(),
 });
 
-/* Replace a profile's assignees with exactly the ids given. */
-async function setAssignees(profileId: number, ids: number[], actorId: number) {
+/* Replace a profile's assignees with exactly the ids given. Returns the ids
+   that were not assigned before, which are the people worth telling. */
+async function setAssignees(profileId: number, ids: number[], actorId: number): Promise<number[]> {
   const unique = [...new Set(ids)];
+  const prior = await pool.query("select user_id from profile_assignees where profile_id=$1", [
+    profileId,
+  ]);
+  const had = new Set(prior.rows.map((r) => r.user_id as number));
   await pool.query("delete from profile_assignees where profile_id=$1", [profileId]);
   for (const userId of unique) {
     await pool.query(
@@ -121,6 +137,15 @@ async function setAssignees(profileId: number, ids: number[], actorId: number) {
       [profileId, userId, actorId],
     );
   }
+  return unique.filter((id) => !had.has(id));
+}
+
+/* "Admin added you to Mark Chen". Its own activity rather than part of the
+   profile's create/update line, because it has its own audience: the people
+   added, not everyone who can see the profile. */
+async function announceAssignment(actorId: number, profileId: number, fullName: string, added: number[]) {
+  if (!added.length) return;
+  await audit(actorId, "assign", "profile", profileId, { full_name: fullName, added }, added);
 }
 
 profiles.post(
@@ -133,7 +158,7 @@ profiles.post(
                              bidder_id, bidder_status, for_job, for_ai_training)
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
       [
-        b.full_name, b.email, b.phone, b.linkedin_url, b.notes, actor.id,
+        b.full_name, b.email, b.phone, b.linkedin_url, sealText(b.notes), actor.id,
         b.bidder_id ?? null,
         // Naming a bidder without a status means the work is assigned.
         b.bidder_status ?? (b.bidder_id ? "assigned" : "none"),
@@ -142,8 +167,9 @@ profiles.post(
     );
     const id = rows[0].id as number;
     // A profile with no assignee belongs to whoever made it.
-    await setAssignees(id, b.assignee_ids.length ? b.assignee_ids : [actor.id], actor.id);
+    const added = await setAssignees(id, b.assignee_ids.length ? b.assignee_ids : [actor.id], actor.id);
     await audit(actor.id, "create", "profile", id, { full_name: b.full_name });
+    await announceAssignment(actor.id, id, b.full_name, added);
     res.status(201).json(await oneProfile(id));
   }),
 );
@@ -171,7 +197,7 @@ profiles.patch(
        where id = $1`,
       [
         id, b.full_name ?? null, b.email ?? null, b.phone ?? null, b.linkedin_url ?? null,
-        b.notes ?? null,
+        b.notes === undefined ? null : sealText(b.notes),
         // bidder_id is nullable, so "sent as null" and "not sent" differ:
         // the flag says whether to write it at all.
         "bidder_id" in b,
@@ -181,9 +207,16 @@ profiles.patch(
         b.for_ai_training ?? null,
       ],
     );
-    if (b.assignee_ids) await setAssignees(id, b.assignee_ids, actor.id);
-    await audit(actor.id, "update", "profile", id, b);
-    res.json(await oneProfile(id));
+    const added = b.assignee_ids ? await setAssignees(id, b.assignee_ids, actor.id) : [];
+    /* The History log is not encrypted, so the notes themselves stay out
+       of it: it records that they changed, not what they say. */
+    await audit(actor.id, "update", "profile", id, {
+      ...b,
+      notes: b.notes === undefined ? undefined : "(changed)",
+    });
+    const after = await oneProfile(id);
+    await announceAssignment(actor.id, id, after.full_name, added);
+    res.json(after);
   }),
 );
 
@@ -217,7 +250,8 @@ profiles.get(
 const siteBody = z.object({
   name: z.string().trim().min(1, "needs a name").max(80),
   url: z.string().trim().url("must be a full URL").max(300).or(z.literal("")).default(""),
-  summary: z.string().trim().max(500).default(""),
+  // The site's notes, shown on every card for the site. Room for list and link markup.
+  summary: z.string().trim().max(4000).default(""),
   icon_url: z.string().trim().max(500).default(""),
   sort_order: z.number().int().min(0).max(999).default(0),
   active: z.boolean().default(true),
@@ -312,7 +346,7 @@ profiles.post(
             [
               existing.rows[0].id,
               url.slice(0, 300),
-              (r.summary ?? "").slice(0, 500),
+              (r.summary ?? "").slice(0, 4000),
               (r.icon_url ?? "").slice(0, 500),
               truthy(r.active ?? "", true),
               sort,
@@ -326,7 +360,7 @@ profiles.post(
             [
               name,
               url.slice(0, 300),
-              (r.summary ?? "").slice(0, 500),
+              (r.summary ?? "").slice(0, 4000),
               (r.icon_url ?? "").slice(0, 500),
               truthy(r.active ?? "", true),
               sort ?? 0,
@@ -450,8 +484,11 @@ const accountBody = z.object({
   profile_id: z.number().int(),
   site_id: z.number().int(),
   status: z.enum(TRAINING_STATUSES).default("created"),
-  account_email: z.string().trim().email("must be a valid email").max(160).or(z.literal("")).default(""),
-  note: z.string().trim().max(500).default(""),
+  /* Optional, with no default. The board and the matrix send only a status;
+     a default of "" here used to be written over the stored email and note
+     on every drag. Left out, they are left alone. */
+  account_email: z.string().trim().email("must be a valid email").max(160).or(z.literal("")).optional(),
+  note: z.string().trim().max(500).optional(),
 });
 
 /* Upsert: adding an account to a profile, or moving its status along. */
@@ -460,19 +497,44 @@ profiles.put(
   h(async (req, res) => {
     const actor = req.user!;
     const b = accountBody.parse(req.body);
+    // The status as it stands, so a change can be reported with both ends.
+    const prior = await pool.query(
+      "select status from training_accounts where profile_id=$1 and site_id=$2",
+      [b.profile_id, b.site_id],
+    );
+    const from = prior.rows[0]?.status as string | undefined;
     const { rows } = await pool.query(
       `insert into training_accounts (profile_id, site_id, status, account_email, note, updated_by)
-       values ($1,$2,$3,$4,$5,$6)
+       values ($1,$2,$3,coalesce($4,''),coalesce($5,''),$6)
        on conflict (profile_id, site_id) do update set
          status = excluded.status,
-         account_email = excluded.account_email,
-         note = excluded.note,
+         account_email = coalesce($4, training_accounts.account_email),
+         note = coalesce($5, training_accounts.note),
          updated_by = excluded.updated_by,
          updated_at = now()
        returning id, card_no, profile_id, site_id, status, account_email, note, updated_at`,
-      [b.profile_id, b.site_id, b.status, b.account_email, b.note, actor.id],
+      [b.profile_id, b.site_id, b.status, b.account_email ?? null, b.note ?? null, actor.id],
     );
-    await audit(actor.id, "update", "training_account", rows[0].id, { status: b.status });
+    /* Dragging a card on the board lands here, not on PATCH /cards. It is
+       the same event as changing the status in the card modal, so it is
+       recorded the same way and tells the same people; before this, a drag
+       was a generic "update" that notified nobody. */
+    const cardNo = rows[0].card_no as number;
+    if (from !== undefined && from !== b.status) {
+      await audit(
+        actor.id,
+        "move",
+        "card",
+        cardNo,
+        { card_no: cardNo, from, to: b.status },
+        await watchersOfCard(cardNo),
+      );
+    } else {
+      await audit(actor.id, from === undefined ? "create" : "update", "card", cardNo, {
+        card_no: cardNo,
+        status: b.status,
+      });
+    }
     res.json(rows[0]);
   }),
 );
@@ -499,6 +561,8 @@ const cardSql = `
   select ta.id, ta.card_no, ta.status, ta.account_email, ta.note,
          ta.created_at, ta.updated_at,
          ta.profile_id, p.full_name as profile_name,
+         -- The profile's own contact details, for the card's Account section.
+         p.email as profile_email, p.phone as profile_phone, p.linkedin_url as profile_linkedin,
          ta.site_id, ts.name as site_name, ts.url as site_url,
          ts.summary as site_summary, ts.icon_url as site_icon_url,
          (select json_build_object(

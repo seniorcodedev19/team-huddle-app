@@ -8,6 +8,7 @@ import AddSiteInline from "./AddSiteInline";
 import SiteLogo from "./SiteLogo";
 import Dropdown from "./Dropdown";
 import Avatar from "./Avatar";
+import RichText, { plainText } from "./RichText";
 import type { ProfileAssignee, TrainingMatrix as Matrix, TrainingStatus } from "@/lib/types";
 
 type View = "table" | "kanban" | "cards";
@@ -202,7 +203,7 @@ export default function TrainingMatrix({ matrix }: { matrix: Matrix }) {
               {matrix.sites.map((site) => (
                 <tr key={site.id}>
                   <th scope="row" className="person-col">
-                    <span className="site-cell" title={site.summary || undefined}>
+                    <span className="site-cell" title={site.summary ? plainText(site.summary) : undefined}>
                       <SiteLogo name={site.name} iconUrl={site.icon_url} siteUrl={site.url} size={20} />
                       {site.url ? (
                         <a href={site.url} target="_blank" rel="noreferrer noopener">
@@ -261,7 +262,7 @@ export default function TrainingMatrix({ matrix }: { matrix: Matrix }) {
                     ) : null}
                   </div>
                 </header>
-                {site.summary ? <p className="site-summary">{site.summary}</p> : null}
+                {site.summary ? <RichText text={site.summary} className="site-summary" /> : null}
                 {/* With no accounts the card shows nothing here, so the add
                     button is the only thing left to act on. */}
                 {Object.keys(tally).length > 0 && (

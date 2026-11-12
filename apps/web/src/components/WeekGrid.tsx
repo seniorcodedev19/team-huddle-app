@@ -7,6 +7,7 @@ import { useAction } from "@/lib/client";
 import { weekStartOf } from "@/lib/dates";
 import { fmt } from "@/lib/format";
 import { isTimeTracking, type Metric, type WeekData } from "@/lib/types";
+import ConfirmDialog from "./ConfirmDialog";
 import { WeekSelect } from "./WeekPicker";
 
 function weekTotal(data: WeekData, m: Metric) {
@@ -30,10 +31,28 @@ export default function WeekGrid({ data }: { data: WeekData }) {
     const q = p.toString();
     router.push(q ? `${pathname}?${q}` : pathname);
   }
-  const [vals, setVals] = useState<Record<number, string>>(() =>
-    Object.fromEntries(data.metrics.filter((m) => !isTimeTracking(m)).map((m) => [m.id, String(weekTotal(data, m) || "")])),
+  /* Fields still empty for an open week start from the daily work typed on
+     this person's profiles. Anything already entered is left as it is. The
+     filled numbers are not saved until the week is saved or submitted. */
+  const [autoFilled] = useState<Set<number>>(
+    () =>
+      new Set(
+        data.metrics
+          .filter((m) => !isTimeTracking(m) && !weekTotal(data, m) && (data.work_fill?.[m.id] ?? 0) > 0)
+          .map((m) => m.id),
+      ),
   );
+  const [vals, setVals] = useState<Record<number, string>>(() =>
+    Object.fromEntries(
+      data.metrics
+        .filter((m) => !isTimeTracking(m))
+        .map((m) => [m.id, String((autoFilled.has(m.id) ? data.work_fill?.[m.id] : weekTotal(data, m)) || "")]),
+    ),
+  );
+  // Fields the person has since changed, so they stop claiming to be filled in.
+  const [touched, setTouched] = useState<Set<number>>(() => new Set());
   const [summary, setSummary] = useState(data.report?.summary ?? "");
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
 
   if (data.metrics.length === 0) {
     return (
@@ -106,8 +125,16 @@ export default function WeekGrid({ data }: { data: WeekData }) {
                       inputMode="decimal"
                       value={vals[m.id] ?? ""}
                       disabled={!data.editable}
-                      onChange={(e) => setVals((v) => ({ ...v, [m.id]: e.target.value }))}
+                      onChange={(e) => {
+                        setVals((v) => ({ ...v, [m.id]: e.target.value }));
+                        setTouched((t) => new Set(t).add(m.id));
+                      }}
                     />
+                    {autoFilled.has(m.id) && !touched.has(m.id) && (
+                      <div className="muted small" style={{ marginTop: 3 }}>
+                        From daily work · not saved yet
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -143,14 +170,25 @@ export default function WeekGrid({ data }: { data: WeekData }) {
               <button
                 className="btn"
                 disabled={submit.busy || save.busy}
-                onClick={async () => {
-                  if (!window.confirm("Submit this week for review? You won't be able to edit it unless it's returned.")) return;
-                  if (!(await saveNumbers())) return;
-                  submit.run("POST", "/report/submit", { week_start: data.week_start, summary });
-                }}
+                onClick={() => setConfirmSubmit(true)}
               >
                 {data.status === "returned" ? "Resubmit week" : "Submit week for review"}
               </button>
+              {confirmSubmit && (
+                <ConfirmDialog
+                  title="Submit this week for review?"
+                  message="You won't be able to edit it unless it's returned."
+                  confirmLabel="Submit"
+                  busy={submit.busy || save.busy}
+                  onConfirm={async () => {
+                    // Closed first: a failed save shows its message under the form.
+                    setConfirmSubmit(false);
+                    if (!(await saveNumbers())) return;
+                    submit.run("POST", "/report/submit", { week_start: data.week_start, summary });
+                  }}
+                  onCancel={() => setConfirmSubmit(false)}
+                />
+              )}
             </div>
             {(save.error || submit.error) && (
               <div className="msg error" role="alert">

@@ -1,17 +1,19 @@
 import Accordion from "@/components/Accordion";
 import Breakdown from "@/components/Breakdown";
-import PointsChart from "@/components/PointsChart";
 import StatTiles from "@/components/StatTiles";
 import StatusPill from "@/components/StatusPill";
 import TeamTiles from "@/components/TeamTiles";
-import { TeamDailyDonut, TeamInterviewDonut } from "@/components/TeamOverview";
+import { TeamDailyDonut } from "@/components/TeamOverview";
+import WorkInterviews from "@/components/WorkInterviews";
 import TodayInterviews from "@/components/TodayInterviews";
 import TrainingSummary from "@/components/TrainingSummary";
 import WeekGrid from "@/components/WeekGrid";
 import WeekPicker from "@/components/WeekPicker";
+import WorkCharts from "@/components/WorkCharts";
 import { apiFetch, tryFetch } from "@/lib/api";
 import { addDays, weekParam } from "@/lib/dates";
-import type { Interview, TeamProfile, TeamWeekRow, TrainingMatrix, User, WeekData } from "@/lib/types";
+import type { Interview, TeamProfile, TeamWeekRow, TrainingMatrix, User, WeekData, WorkRange } from "@/lib/types";
+import { rangeStart } from "@/lib/work";
 
 export default async function Dashboard({
   searchParams,
@@ -48,10 +50,9 @@ export default async function Dashboard({
   const from = `${addDays(d.today, -1)}T00:00:00.000Z`;
   const to = `${addDays(d.today, 2)}T00:00:00.000Z`;
 
-  /* The whole displayed week, for the outcome donut. Saturday + 1 day so the
-     range covers every instant of the final day whatever the reader's zone. */
-  const weekFrom = `${addDays(d.week_start, -7 * (weeks - 1))}T00:00:00.000Z`;
-  const weekTo = `${addDays(d.week_end, 1)}T00:00:00.000Z`;
+  /* The weeks the picker shows, as plain days, for the interviews panel.
+     Daily work has no time of day, so there is no time zone to allow for. */
+  const weekFrom = addDays(d.week_start, -7 * (weeks - 1));
 
   /* The period before this one, only to show the change on the team tiles.
      It has to be the same length, or the comparison is meaningless. */
@@ -59,10 +60,13 @@ export default async function Dashboard({
   if (weeks > 1) prevQs.set("weeks", String(weeks));
 
   // Last period, only to show the change on the team tiles.
-  const [prev, todays, weekIvs] = await Promise.all([
+  /* Daily work has its own periods (today, this week, this month), not the
+     week picker's: one read covers all three, always ending today. */
+  const [prev, todays, weekWork, work] = await Promise.all([
     tryFetch<{ rows: TeamWeekRow[] }>(`/team-week?${prevQs}`),
     tryFetch<Interview[]>(`/interviews?from=${from}&to=${to}`),
-    tryFetch<Interview[]>(`/interviews?from=${weekFrom}&to=${weekTo}`),
+    tryFetch<WorkRange>(`/work?from=${weekFrom}&to=${d.week_end}`),
+    tryFetch<WorkRange>(`/work?from=${rangeStart(d.today)}&to=${d.today}`),
   ]);
   const prevRows = prev.ok ? prev.data.rows.filter((r) => r.role !== "admin") : null;
 
@@ -102,8 +106,12 @@ export default async function Dashboard({
       {rows.length > 0 ? (
         <div className="two" style={{ marginBottom: 12 }}>
           <div className="panel">
-            <h2 className="panel-title">Interview outcomes</h2>
-            <TeamInterviewDonut interviews={weekIvs.ok ? weekIvs.data : []} />
+            <h2 className="panel-title">Interviews</h2>
+            {weekWork.ok ? (
+              <WorkInterviews rows={weekWork.data.rows} />
+            ) : (
+              <div className="banner error">{weekWork.error}</div>
+            )}
           </div>
           <div className="panel">
             <h2 className="panel-title">Team daily score</h2>
@@ -119,17 +127,14 @@ export default async function Dashboard({
       ) : null}
 
       <div style={{ marginBottom: 12 }}>
-        {!team.ok ? (
-          <Accordion title="Everyone's points">
-            <div className="banner error">{team.error}</div>
-          </Accordion>
-        ) : rows.length === 0 ? (
-          <Accordion title="Everyone's points">
-            <div className="empty">No people to chart yet this week.</div>
-          </Accordion>
-        ) : (
-          <PointsChart rows={rows} meId={me.id} week={d.week_start} />
-        )}
+        {!work.ok ? (
+          <div className="panel">
+            <h2 className="panel-title">Daily work</h2>
+            <div className="banner error">{work.error}</div>
+          </div>
+        ) : profs.ok ? (
+          <WorkCharts profiles={profs.data} data={work.data} />
+        ) : null}
       </div>
 
       {me.role !== "admin" && (

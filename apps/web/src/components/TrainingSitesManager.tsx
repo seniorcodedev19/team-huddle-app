@@ -4,6 +4,8 @@ import { useState } from "react";
 import { callJson, useAction } from "@/lib/client";
 import AddSiteInline from "./AddSiteInline";
 import { Spinner } from "./Icons";
+import RichNoteEditor from "./RichNoteEditor";
+import { plainText } from "./RichText";
 import SiteLogo from "./SiteLogo";
 import Switch from "./Switch";
 import type { SiteMetaPreview, TrainingSite } from "@/lib/types";
@@ -67,7 +69,7 @@ export default function TrainingSitesManager({ sites }: { sites: TrainingSite[] 
                         <SiteLogo name={s.name} iconUrl={s.icon_url} siteUrl={s.url} size={24} />
                         <span>
                           <strong>{s.name}</strong>
-                          {s.summary ? <span className="site-summary-sm">{s.summary}</span> : null}
+                          {s.summary ? <span className="site-summary-sm">{plainText(s.summary)}</span> : null}
                         </span>
                       </span>
                     </td>
@@ -252,16 +254,15 @@ function SiteEditRow({
               }}
               placeholder="https://example.com"
             />
-            <label htmlFor={`se-summary-${site.id}`}>Summary</label>
-            <textarea
+            <label htmlFor={`se-summary-${site.id}`}>Site notes</label>
+            {/* Shown, formatted, as "Site notes" on every board card for this site. */}
+            <RichNoteEditor
               id={`se-summary-${site.id}`}
               value={summary}
-              rows={2}
-              onChange={(e) => setSummary(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") onCancel();
-              }}
-              placeholder="What this site is"
+              onChange={setSummary}
+              maxLength={4000}
+              rows={4}
+              placeholder="What this site is, and anything everyone working on it should know"
             />
           </div>
           <div className="site-edit-actions">

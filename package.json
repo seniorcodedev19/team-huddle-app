@@ -10,6 +10,7 @@
     "db:up": "docker compose up -d db",
     "db:migrate": "npm run migrate -w @team-huddle/api",
     "db:seed": "npm run seed -w @team-huddle/api",
+    "db:encrypt-notes": "npm run encrypt-notes -w @team-huddle/api",
     "lint": "npm run lint -w @team-huddle/api && npm run lint -w @team-huddle/web",
     "build": "npm run lint -w @team-huddle/api && npm run build -w @team-huddle/web",
     "test": "npm test -w @team-huddle/api",

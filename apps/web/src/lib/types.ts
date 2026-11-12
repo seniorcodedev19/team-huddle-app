@@ -89,6 +89,9 @@ export interface WeekData {
   status: Status;
   report: WeekReport | null;
   editable: boolean;
+  /** Metric id -> the week's total of the daily work number linked to it.
+      Fills empty fields of an open week; empty for anything read-only. */
+  work_fill?: Record<number, number>;
   metrics: Metric[];
   days: string[];
   daily: Record<number, Record<string, number>>;
@@ -289,7 +292,10 @@ export interface TeamProfile {
   email: string;
   phone: string;
   linkedin_url: string;
+  /** Stored encrypted; arrives decrypted. */
   notes: string;
+  /** Notes exist but the server could not decrypt them (its secret changed). */
+  notes_locked?: boolean;
   created_by: number | null;
   created_at: string;
   updated_at: string;
@@ -361,6 +367,10 @@ export interface BoardCard {
   updated_at: string;
   profile_id: number;
   profile_name: string;
+  /** The profile's own contact details. "" when the profile has none. */
+  profile_email: string;
+  profile_phone: string;
+  profile_linkedin: string;
   site_id: number;
   site_name: string;
   site_url: string;
@@ -417,3 +427,28 @@ export interface ActivityPage {
   limit: number;
   offset: number;
 }
+
+/* ---------- daily work amounts (migration 028) ---------- */
+
+/** Typed per profile per day. */
+export type ProfileWorkMetric = "apply" | "interview_scheduled" | "interview_done";
+/** Typed per board card per day. */
+export type CardWorkMetric = "ai_apply" | "ai_interview" | "assessment";
+export type WorkMetric = ProfileWorkMetric | CardWorkMetric;
+
+/** One number for one day. `card_no` is null for a profile's own numbers. */
+export interface WorkLog {
+  log_date: string;
+  profile_id: number;
+  card_no: number | null;
+  metric: WorkMetric;
+  value: number;
+}
+export interface WorkRange {
+  /** The API's idea of today, so the browser never has to decide. */
+  today: string;
+  from: string;
+  to: string;
+  rows: WorkLog[];
+}
+

@@ -169,7 +169,7 @@ a { color: inherit; }
 }
 .card-main { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .card-rail {
-  display: flex; flex-direction: column; gap: 16px;
+  display: flex; flex-direction: column; gap: 14px;
   padding-left: 20px;
   border-left: 1px solid var(--line);
 }
@@ -205,10 +205,21 @@ a { color: inherit; }
    never pushes them off the edge. */
 .card-actions {
   position: absolute; top: 12px; right: 12px;
-  display: flex; gap: 4px; z-index: 1;
+  display: flex; gap: 2px; z-index: 1;
 }
+/* Small and quiet: no box until hovered, so the corner reads as part of the
+   header rather than a pair of buttons competing with the title. */
+.card-actions .icon-btn {
+  width: 28px; height: 28px; padding: 0;
+  border: 0; border-radius: var(--r-sm);
+  background: transparent; box-shadow: none;
+  color: var(--muted);
+}
+.card-actions .icon-btn svg { width: 14px; height: 14px; }
+.card-actions .icon-btn:hover { background: var(--raise); color: var(--ink); }
+.card-actions .icon-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent-ring); }
 /* Room for the buttons so the title never runs under them. */
-.modal.modal-card .modal-head { padding-right: 76px; }
+.modal.modal-card .modal-head { padding-right: 68px; }
 
 /* ---------- comments ---------- */
 
@@ -318,6 +329,133 @@ a { color: inherit; }
     border-left: 0; border-bottom: 1px solid var(--line);
   }
 }
+
+/* ---------- daily work ---------- */
+
+/* One row of controls above both charts: they scope both. */
+.work-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.work-title { margin: 0 6px 0 0; font-size: 16px; font-weight: 600; letter-spacing: -0.015em; }
+.work-bar .dd { width: auto; min-width: 150px; }
+.work-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1100px) { .work-panels { grid-template-columns: minmax(0, 1fr); } }
+.work { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.work-range { display: inline-flex; align-items: center; gap: 6px; }
+/* Headline counts: the number large, what it counts beneath it. */
+.work-figures { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 4px; }
+.work-figures > div { display: flex; flex-direction: column; gap: 2px; }
+.work-figure { font-size: 34px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+/* A new range loading: the last picture stays, dimmed, instead of blanking. */
+.work-panels.pending { opacity: 0.55; transition: opacity 0.15s ease; }
+.work-panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+
+.work-date {
+  font: inherit; font-size: 13px; padding: 6px 9px; width: auto;
+  color: var(--ink); background: var(--field);
+  border: 1px solid var(--field-line); border-radius: var(--r-md);
+}
+/* Compact, right-aligned, and without the browser's spin buttons. */
+.work-input {
+  width: 68px; padding: 5px 8px; text-align: right;
+  font: inherit; font-size: 13px; font-variant-numeric: tabular-nums;
+  color: var(--ink); background: var(--field);
+  border: 1px solid var(--field-line); border-radius: var(--r-sm);
+  appearance: textfield; -moz-appearance: textfield;
+}
+.work-input::-webkit-outer-spin-button,
+.work-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.work-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2.5px var(--accent-ring); }
+
+/* The day's numbers in a panel's right rail: card and profile alike. */
+.card-work { display: flex; flex-direction: column; gap: 8px; }
+.card-work .card-section { margin: 0; }
+.card-work-fields { display: flex; flex-direction: column; gap: 6px; }
+.card-work-fields label {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin: 0; font-size: 13px; color: var(--muted);
+}
+
+/* Grouped bars. The plot scrolls sideways when there are too many groups to
+   fit at a readable width, instead of squeezing them. */
+.workbars-scroll { overflow-x: auto; overflow-y: hidden; }
+.workbars-plot { position: relative; }
+.workbars-svg { display: block; overflow: visible; }
+.workbars-svg:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 2px; border-radius: var(--r-sm); }
+.workbars-hover { fill: var(--raise); }
+/* A filled square, mirroring the bars it keys. */
+.workbars-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+
+.workchart-tip {
+  position: absolute; top: 8px; z-index: 2; pointer-events: none;
+  min-width: 170px; padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong); border-radius: var(--r-md);
+  box-shadow: var(--shadow-lift);
+  font-size: 12.5px;
+}
+.workchart-tip-head { margin-bottom: 5px; font-weight: 600; }
+/* Value first and strong, name after: here the reader has the series and
+   wants the number. */
+.workchart-tip-row { display: flex; align-items: center; gap: 7px; line-height: 1.6; }
+.workchart-tip-row strong { min-width: 22px; text-align: right; font-variant-numeric: tabular-nums; }
+.workchart-tip-row span:last-child { color: var(--muted); }
+.workchart-key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+.workchart-table summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
+.workchart-table table { margin-top: 8px; }
+.workchart-table th.num, .workchart-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.profile-modal .modal-head h2 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.015em; }
+
+/* ---------- rich notes ---------- */
+
+/* The toolbar and the text area read as one field: one border around both. */
+.rich-note {
+  border: 1px solid var(--field-line); border-radius: var(--r-md);
+  background: var(--field); overflow: hidden;
+}
+.rich-note:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2.5px var(--accent-ring); }
+.rich-note.disabled { opacity: 0.6; }
+.rich-toolbar {
+  display: flex; align-items: center; gap: 2px;
+  padding: 4px 6px; border-bottom: 1px solid var(--line);
+}
+.rich-tool {
+  width: 28px; height: 26px; display: inline-grid; place-items: center;
+  border: 0; border-radius: var(--r-sm); background: none;
+  color: var(--muted); font: inherit; font-size: 13.5px; cursor: pointer;
+}
+.rich-tool:hover:not(:disabled) { background: var(--raise); color: var(--ink); }
+.rich-tool:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent-ring); }
+.rich-tool:disabled { opacity: 0.4; cursor: default; }
+.rich-mode { margin-left: auto; display: inline-flex; gap: 2px; }
+.rich-mode button {
+  font: inherit; font-size: 12px; padding: 3px 9px;
+  border: 0; border-radius: var(--r-sm); background: none; color: var(--muted); cursor: pointer;
+}
+.rich-mode button.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+/* The text area inside loses its own border; the wrapper draws it. */
+.rich-note textarea {
+  display: block; width: 100%; resize: vertical;
+  border: 0; border-radius: 0; background: transparent; box-shadow: none;
+  font: inherit; font-size: 13.5px; line-height: 1.5; padding: 8px 10px;
+}
+.rich-note textarea:focus { outline: none; box-shadow: none; }
+.rich-preview { padding: 8px 10px; }
+
+/* A note as it reads. */
+.rich-text { font-size: 13.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.rich-text p { margin: 0 0 6px; }
+.rich-text p:last-child, .rich-text ul:last-child, .rich-text ol:last-child { margin-bottom: 0; }
+.rich-text ul, .rich-text ol { margin: 0 0 6px; padding-left: 20px; }
+.rich-text li { margin: 2px 0; }
+.rich-text a { color: var(--accent); }
+/* The card's Account section: label and value in two columns. */
+.card-account {
+  display: grid; grid-template-columns: max-content minmax(0, 1fr);
+  gap: 5px 14px; margin: 0; font-size: 13.5px;
+}
+.card-account dt { color: var(--muted); }
+.card-account dd { margin: 0; overflow-wrap: anywhere; }
+.card-account a { color: var(--accent); }
 
 /* ---------- confirm dialog ---------- */
 
@@ -2427,7 +2565,12 @@ button.chip.toggle:focus-visible { outline: none; box-shadow: 0 0 0 2.5px var(--
    dropdowns up with the fields above them. */
 .profile-editor textarea,
 .profile-editor input,
-.profile-editor .dd { width: 100%; }
+.profile-editor .dd,
+/* The same in the edit modal, but only its details column: the day's
+   numbers in the right panel are deliberately narrow. */
+.profile-modal .card-main textarea,
+.profile-modal .card-main input,
+.profile-modal .card-main .dd { width: 100%; }
 /* Digits line up and read as a number rather than prose. */
 .input-phone { font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
 .btn.small { padding: 5px 10px; font-size: 12.5px; }

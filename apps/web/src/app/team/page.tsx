@@ -1,4 +1,5 @@
 import Accordion from "@/components/Accordion";
+import PointsChart from "@/components/PointsChart";
 import QuerySelect from "@/components/QuerySelect";
 import TeamAchievements from "@/components/TeamAchievements";
 import TeamWeekTable from "@/components/TeamWeekTable";
@@ -36,6 +37,8 @@ export default async function TeamPage({
   ]);
 
   if (!res.ok) return <div className="banner error">{res.error}</div>;
+
+  const chartRows = res.data.rows.filter((r) => r.role !== "admin");
 
   const extra: Record<string, string> = {};
   if (sp.team) extra.team = sp.team;
@@ -82,6 +85,19 @@ export default async function TeamPage({
       </div>
 
       <TeamAchievements me={me} weekStart={res.data.week_start} rows={res.data.rows} />
+
+      {/* Moved here from the Dashboard: it compares people, which is what
+          this page is for. Admins do not report a week, so they are left out
+          of the chart exactly as they were there. */}
+      <div style={{ marginTop: 12 }}>
+        {chartRows.length === 0 ? (
+          <Accordion title="Everyone's points">
+            <div className="empty">No people to chart yet this week.</div>
+          </Accordion>
+        ) : (
+          <PointsChart rows={chartRows} meId={me.id} week={res.data.week_start} />
+        )}
+      </div>
 
       <div style={{ marginTop: 12 }}>
         <Accordion title="Team results">

@@ -2,10 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Avatar from "./Avatar";
+import ConfirmDialog from "./ConfirmDialog";
 import Dropdown from "./Dropdown";
 import SiteLogo from "./SiteLogo";
+import RichNoteEditor from "./RichNoteEditor";
 import Switch from "./Switch";
+import WorkFields from "./WorkFields";
 import { useAction } from "@/lib/client";
+import { JOB_WORK } from "@/lib/work";
 import {
   BIDDER_LABEL,
   BIDDER_STATUSES,
@@ -116,12 +120,9 @@ export default function ProfilesPanel({
      training alike — the question is what each is used for, not which
      bucket it falls in, so these deliberately overlap and do not sum to the
      total. */
-  /* The accounts flagged is_bidder — the dedicated bidder users, as opposed
-     to any colleague who happens to be named on a profile. */
-  const bidderIds = useMemo(
-    () => new Set(people.filter((x) => x.is_bidder).map((x) => x.id)),
-    [people],
-  );
+  // The profile being edited has notes the server could not decrypt.
+  const notesLocked =
+    typeof editing === "number" && Boolean(profiles.find((x) => x.id === editing)?.notes_locked);
 
   const counts = useMemo(() => {
     let job = 0;
@@ -130,17 +131,12 @@ export default function ProfilesPanel({
     for (const p of shown) {
       if (p.for_job) job += 1;
       if (p.for_ai_training) training += 1;
-      /* Profiles a bidder account is actively bidding on. Both halves
-         matter: 'assigned' means the work is owned but not yet in flight,
-         and a profile can name an ordinary colleague rather than one of the
-         bidder accounts. Neither counts here, so this is 0 until a real
-         bidder is mid-bid. */
-      if (p.bidder_status === "bidding" && p.bidder_id !== null && bidderIds.has(p.bidder_id)) {
-        bidding += 1;
-      }
+      /* Every profile whose bidder status is Bidding, whoever the bidder is.
+         'Assigned' — owned but not yet in flight — does not count. */
+      if (p.bidder_status === "bidding") bidding += 1;
     }
     return { job, training, bidding, total: shown.length };
-  }, [shown, bidderIds]);
+  }, [shown]);
 
   /* Only people actually set as a bidder somewhere, for the same reason as
      assigneeOptions: offering every user would mostly list dead options. */
@@ -150,28 +146,19 @@ export default function ProfilesPanel({
     return [...seen.values()].sort((x, y) => x.name.localeCompare(y.name));
   }, [profiles]);
 
-  /* The editor renders above the grid, so clicking Edit on a card further
-     down the page changes something off-screen and reads as a dead button.
-     Scroll it into view once it exists — in an effect rather than the click
-     handler, because the panel is not in the DOM until this renders.
-     Focus goes with it, so keyboard and screen-reader users land there too. */
+  /* The editor is a modal. Focus starts on the name field, and Escape closes
+     it — except while a dropdown inside it is open, where Escape belongs to
+     the dropdown. That listener is registered when the menu opens, after
+     this one, so the open menu is still in the DOM when this runs. */
   useEffect(() => {
     if (editing === null) return;
-    const el = editorRef.current;
-    if (!el) return;
-    /* Focus the first field rather than the panel: the panel is not
-       interactive, and this puts the caret where typing should go.
-       preventScroll, because the scroll below is the one that should win. */
-    el.querySelector<HTMLInputElement>("#pf-name")?.focus({ preventScroll: true });
-    /* Wait a frame before scrolling. Inserting the editor reflows the grid
-       below it, and a smooth scroll started in the same frame aims at the
-       pre-reflow position and lands somewhere else entirely. */
-    const id = requestAnimationFrame(() => {
-      const top = el.getBoundingClientRect().top + window.scrollY;
-      // A little headroom so the panel is not flush against the viewport.
-      window.scrollTo({ top: Math.max(0, top - 12), behavior: "smooth" });
-    });
-    return () => cancelAnimationFrame(id);
+    editorRef.current?.querySelector<HTMLInputElement>("#pf-name")?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || document.querySelector(".dd-sheet")) return;
+      setEditing(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [editing]);
 
   const openNew = () => {
@@ -208,12 +195,18 @@ export default function ProfilesPanel({
       setError("A profile needs a name.");
       return;
     }
+    /* A note that could not be decrypted is left out of the save entirely,
+       so the stored copy survives for whoever still has the old key. */
+    const body = notesLocked ? { ...form, notes: undefined } : form;
     const ok =
       editing === "new"
         ? await run("POST", "/profiles", form)
-        : await run("PATCH", `/profiles/${editing}`, form);
+        : await run("PATCH", `/profiles/${editing}`, body);
     if (ok) setEditing(null);
   };
+
+  /* The profile awaiting a delete confirmation, if any. */
+  const [confirming, setConfirming] = useState<TeamProfile | null>(null);
 
   const remove = async (p: TeamProfile) => {
     if (await run("DELETE", `/profiles/${p.id}`)) setEditing(null);
@@ -360,8 +353,29 @@ export default function ProfilesPanel({
       </div>
 
       {editing !== null && (
-        <div className="panel profile-editor" ref={editorRef}>
-          <h2 className="panel-title">{editing === "new" ? "New profile" : "Edit profile"}</h2>
+        <div className="modal-backdrop">
+          <div
+            className="modal modal-card profile-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pf-title"
+            ref={editorRef}
+          >
+            <div className="modal-head">
+              <h2 id="pf-title">{editing === "new" ? "New profile" : form.full_name || "Edit profile"}</h2>
+              <div className="card-actions">
+                <button className="icon-btn" type="button" aria-label="Close" onClick={() => setEditing(null)}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="modal-body">
+              {/* Details on the left, the day's work on the right — the same
+                  arrangement as a card on the AI Training board. */}
+              <div className="card-body">
+                <div className="card-main">
           <div className="two">
             <div>
               <label htmlFor="pf-name">Full name</label>
@@ -465,12 +479,17 @@ export default function ProfilesPanel({
           </div>
 
           <label htmlFor="pf-notes">Notes</label>
-          <textarea
+          <RichNoteEditor
             id="pf-notes"
-            rows={3}
             value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            placeholder="Anything worth remembering about this profile."
+            maxLength={2000}
+            disabled={notesLocked}
+            onChange={(notes) => setForm({ ...form, notes })}
+            placeholder={
+              notesLocked
+                ? "These notes are encrypted with a key this server no longer has, so they can't be shown or changed."
+                : "Anything worth remembering about this profile."
+            }
           />
 
           {/* Assignee, bidder and bidder status line up in one row: they are
@@ -478,7 +497,7 @@ export default function ProfilesPanel({
               dropdown, one at a time; chosen people show below as removable
               pills. A multiple-select hides the unpicked names behind a
               scroll and is awkward to deselect. */}
-          <div className="people-row">
+          <div className="people-row pb-2">
             <div>
               <label htmlFor="pf-assignee">Assigned to</label>
               <Dropdown<number>
@@ -551,32 +570,61 @@ export default function ProfilesPanel({
             </div>
           </div>
 
+                </div>
+
+                <aside className="card-rail">
+                  {editing === "new" ? (
+                    <p className="muted small" style={{ margin: 0 }}>
+                      Create the profile first, then open it again to record daily work.
+                    </p>
+                  ) : profiles.find((x) => x.id === editing)?.for_job ? (
+                    /* Follows the SAVED Job setting, not the switch in this form:
+                       these numbers save the moment they are typed, so flipping
+                       the switch and then cancelling must not leave job numbers
+                       on a profile that is not used for jobs. */
+                    <WorkFields subject={{ profile_id: editing }} metrics={JOB_WORK} />
+                  ) : (
+                    <p className="muted small" style={{ margin: 0 }}>
+                      Daily job work applies to profiles used for Job. Turn on Job and save first.
+                      AI training numbers are entered on each card in AI Training.
+                    </p>
+                  )}
+                </aside>
+              </div>
+            </div>
+
           {/* Delete sits first, hard left; the save and cancel pair is pushed
               to the right, so the destructive button is nowhere near the one
               you reach for every time. */}
-          <div className="row" style={{ marginTop: 14, gap: 8 }}>
+          <div className="modal-foot">
             {editing !== "new" && (
               <button
                 className="btn danger"
                 type="button"
                 onClick={() => {
-                  const p = profiles.find((x) => x.id === editing);
-                  if (!p) return;
                   /* Deleting takes the profile's assignees, bidder and
                      training accounts with it, so it asks once first. */
-                  if (
-                    !window.confirm(
-                      `Delete ${p.full_name}? This also removes their training accounts and cannot be undone.`,
-                    )
-                  ) {
-                    return;
-                  }
-                  remove(p);
+                  const p = profiles.find((x) => x.id === editing);
+                  if (p) setConfirming(p);
                 }}
                 disabled={busy}
               >
                 Delete
               </button>
+            )}
+            {confirming && (
+              <ConfirmDialog
+                title={`Delete ${confirming.full_name}?`}
+                message="This also removes their training accounts, with the comments on them, and cannot be undone."
+                confirmLabel="Delete profile"
+                danger
+                busy={busy}
+                onConfirm={async () => {
+                  await remove(confirming);
+                  setConfirming(null);
+                }}
+                onCancel={() => setConfirming(null)}
+              />
             )}
             <button
               className="btn secondary"
@@ -590,6 +638,7 @@ export default function ProfilesPanel({
             <button className="btn" type="button" onClick={save} disabled={busy}>
               {editing === "new" ? "Create profile" : "Save changes"}
             </button>
+          </div>
           </div>
         </div>
       )}

@@ -47,7 +47,7 @@ export default function CardModal({ cardNo, onClose }: { cardNo: number; onClose
       className="modal-backdrop"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="modal modal-card" role="dialog" aria-modal="true" aria-label="Card" ref={panel}>
+      <div className="modal modal-card p-2" role="dialog" aria-modal="true" aria-label="Card" ref={panel}>
         <div className="modal-head">
           {card ? (
             <CardTitle card={card} />

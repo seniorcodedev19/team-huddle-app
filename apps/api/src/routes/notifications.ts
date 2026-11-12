@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireRole } from "../auth";
+import { bus } from "../bus";
 import { pool } from "../db";
 import { h } from "../util";
 
@@ -93,9 +94,11 @@ notifications.post(
 
 /* The admin Activity view: what people did on the things they work on, as
    opposed to History, which is every audited change including settings and
-   imports. Same audit_log rows, narrowed to these entities. Calendar and
-   profile events join this list when they are tracked. */
-const ACTIVITY_ENTITIES = ["card", "comment"];
+   imports. Same audit_log rows, narrowed to these entities. */
+const ACTIVITY_ENTITIES = ["card", "comment", "interview"];
+/* A profile's own edits are settings, but being assigned to one is something
+   that happened to a person, so that single action counts as activity. */
+const ACTIVITY_WHERE = "(a.entity = any($1::text[]) or (a.entity = 'profile' and a.action = 'assign'))";
 
 notifications.get(
   "/activity",
@@ -124,14 +127,56 @@ notifications.get(
                   '[]'::json) as notified
          from audit_log a
          left join users u on u.id = a.actor_id
-         where a.entity = any($1::text[])
+         where ${ACTIVITY_WHERE}
          order by a.id desc limit $2 offset $3`,
         [ACTIVITY_ENTITIES, q.limit, q.offset],
       ),
-      pool.query("select count(*)::int n from audit_log where entity = any($1::text[])", [
+      pool.query(`select count(*)::int n from audit_log a where ${ACTIVITY_WHERE}`, [
         ACTIVITY_ENTITIES,
       ]),
     ]);
     res.json({ rows: rows.rows, total: total.rows[0].n, limit: q.limit, offset: q.offset });
   }),
 );
+
+/* The live channel: tells an open browser that something new is waiting.
+
+   It carries a signal, not the notification. The client answers every event
+   — and every reconnect — by re-reading GET /notifications, so the feed in
+   Postgres stays the only source of truth and nothing here needs replaying:
+   a message lost while a connection was down is picked up by the read that
+   follows the reconnect.
+
+   The API token is checked once, when the stream opens. It lasts two
+   minutes and the stream lasts much longer; the token gates opening a
+   stream, not holding one. Each reconnect arrives with a fresh token.
+
+   No database connection is held while the stream is open. */
+const HEARTBEAT_MS = 25_000;
+
+notifications.get("/notifications/stream", (req, res) => {
+  const userId = req.user!.id;
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  // Proxies that buffer responses would hold events back; this opts out.
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders?.();
+  res.write("retry: 5000\n\n");
+
+  const unsubscribe = bus.subscribe(userId, (activityId) => {
+    res.write(`event: activity\ndata: ${JSON.stringify({ id: activityId })}\n\n`);
+  });
+  /* A comment line, ignored by the browser. It keeps idle connections from
+     being closed by anything in between, and a write to a dead socket is how
+     a vanished client gets noticed. */
+  const heartbeat = setInterval(() => res.write(": ping\n\n"), HEARTBEAT_MS);
+
+  const close = () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  };
+  req.on("close", close);
+  res.on("error", close);
+});

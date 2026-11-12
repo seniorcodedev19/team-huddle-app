@@ -20,6 +20,34 @@ async function getUser(id: number) {
   return rows[0];
 }
 
+/* What the weekly report's fields would hold if filled from daily work:
+   metric id -> the week's total of the daily number linked to it
+   (metrics.work_source), over the profiles this person is assigned to.
+
+   A suggestion only. The browser puts it into fields that are still empty;
+   nothing is saved until the person saves or submits the week.
+
+   Best-effort: before migration 029 the column does not exist, and a
+   missing suggestion must not take the whole week view down with it. */
+async function workFill(userId: number, weekStart: string): Promise<Record<number, number>> {
+  try {
+    const { rows } = await pool.query<{ metric_id: number; value: number }>(
+      `select m.id as metric_id, sum(w.value)::int as value
+       from metrics m
+       join work_logs w on w.metric = m.work_source
+       join profile_assignees pa on pa.profile_id = w.profile_id and pa.user_id = $1
+       where m.work_source is not null and m.active
+         and w.log_date between $2 and $3
+       group by m.id`,
+      [userId, weekStart, addDays(weekStart, 6)],
+    );
+    return Object.fromEntries(rows.map((r) => [r.metric_id, r.value]));
+  } catch (err) {
+    console.error("work fill unavailable", err);
+    return {};
+  }
+}
+
 // One person's week: metrics, daily values, score, report status.
 week.get("/week", h(async (req, res) => {
   const actor = req.user!;
@@ -32,6 +60,7 @@ week.get("/week", h(async (req, res) => {
 
   const snap = await weekSnapshot(target, ws);
   const status = snap.report?.status ?? "draft";
+  const editable = target.id === actor.id && (status === "draft" || status === "returned");
   res.json({
     week_start: ws,
     week_end: snap.days[6],
@@ -39,7 +68,9 @@ week.get("/week", h(async (req, res) => {
     user: { id: target.id, name: target.name, email: target.email, team_id: target.team_id, avatar: target.avatar },
     status,
     report: publicReport(snap.report),
-    editable: target.id === actor.id && (status === "draft" || status === "returned"),
+    editable,
+    // Only an open week of one's own is filled in; anything else is read-only.
+    work_fill: editable ? await workFill(target.id, ws) : {},
     metrics: snap.metrics,
     days: snap.days,
     daily: snap.daily,

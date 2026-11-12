@@ -1,5 +1,6 @@
 import Link from "next/link";
 import NotificationList from "@/components/NotificationList";
+import { ActivityText } from "@/components/TimeAgo";
 import { describeActivity } from "@/lib/activity";
 import { apiFetch, tryFetch } from "@/lib/api";
 import type { ActivityPage, AuditPage, NotificationFeed, User } from "@/lib/types";
@@ -39,8 +40,8 @@ export default async function HistoryPage({
 
   const sub: Record<Tab, string> = {
     history: "Every consequential change, newest first. This log is append-only.",
-    activity: "What people did on cards and comments, and who was told about it.",
-    notifications: "Activity that names you: your cards, and comments that mention you.",
+    activity: "What people did on cards, comments, the calendar and profile assignments, and who was told.",
+    notifications: "Activity that names you: your cards and profiles, your calendar events, and comments that mention you.",
   };
 
   return (
@@ -134,7 +135,13 @@ async function ActivityTab({ page }: { page: number }) {
                 <tr key={a.id}>
                   <td className="muted">{new Date(a.at).toLocaleString("en-US")}</td>
                   <td>
-                    {d.href ? <Link href={d.href}>{d.text}</Link> : d.text}
+                    {d.href ? (
+                      <Link href={d.href}>
+                        <ActivityText d={d} />
+                      </Link>
+                    ) : (
+                      <ActivityText d={d} />
+                    )}
                     {d.extra && <div className="muted small">“{d.extra}”</div>}
                   </td>
                   <td className="muted">{a.notified.length ? a.notified.join(", ") : "—"}</td>

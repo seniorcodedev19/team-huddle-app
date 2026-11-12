@@ -16,6 +16,10 @@ async function handler(req: NextRequest, ctx: { params: Promise<{ path: string[]
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: hasBody ? await req.text() : undefined,
       cache: "no-store",
+      /* Ends the upstream request when the browser goes away. For an
+         ordinary call that is merely tidy; for a long-lived stream it is
+         what stops the API holding a subscription for a closed tab. */
+      signal: req.signal,
     });
   } catch {
     return NextResponse.json({ error: "Can't reach the API" }, { status: 503 });

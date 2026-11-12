@@ -6,6 +6,9 @@ import { STATUS_LABEL, STATUS_TONE, STATUSES } from "@/lib/training";
 import { cardKey, type BoardCard, type TrainingStatus } from "@/lib/types";
 import Avatar from "./Avatar";
 import CardComments from "./CardComments";
+import RichText from "./RichText";
+import WorkFields from "./WorkFields";
+import { AI_WORK } from "@/lib/work";
 import Dropdown from "./Dropdown";
 import SiteLogo from "./SiteLogo";
 import { LocalDate } from "./TimeAgo";
@@ -43,20 +46,62 @@ export default function CardPanel({ card }: { card: BoardCard }) {
         <div className="card-main">
           <section>
             <h3 className="card-section">Account</h3>
-            {card.account_email ? (
-              <p className="card-prose">{card.account_email}</p>
+            {/* The profile's details, read from the profile each time the card
+                opens, so an edit on the Profiles page shows here at once. The
+                site account's own email is listed separately only when it was
+                recorded and differs from the profile's. */}
+            {card.profile_email || card.profile_phone || card.profile_linkedin || card.account_email ? (
+              <dl className="card-account">
+                {card.profile_email && (
+                  <>
+                    <dt>Email</dt>
+                    <dd>
+                      <a href={`mailto:${card.profile_email}`}>{card.profile_email}</a>
+                    </dd>
+                  </>
+                )}
+                {card.account_email && card.account_email !== card.profile_email && (
+                  <>
+                    <dt>Site login</dt>
+                    <dd>{card.account_email}</dd>
+                  </>
+                )}
+                {card.profile_phone && (
+                  <>
+                    <dt>Phone</dt>
+                    <dd className="input-phone">{card.profile_phone}</dd>
+                  </>
+                )}
+                {card.profile_linkedin && (
+                  <>
+                    <dt>LinkedIn</dt>
+                    <dd>
+                      {/^https?:\/\//i.test(card.profile_linkedin) ? (
+                        <a href={card.profile_linkedin} target="_blank" rel="noreferrer noopener">
+                          Open profile
+                        </a>
+                      ) : (
+                        card.profile_linkedin
+                      )}
+                    </dd>
+                  </>
+                )}
+              </dl>
             ) : (
-              <p className="muted small">No account email recorded.</p>
+              <p className="muted small">No contact details on this profile yet. Add them on the Profiles page.</p>
             )}
             {card.note && <p className="card-prose muted">{card.note}</p>}
           </section>
 
+          {/* The site's own notes, written once per site by an admin on the
+              Training sites page and shared by every card for that site.
+              Shown here formatted and read-only. */}
           <section>
             <h3 className="card-section">Site notes</h3>
             {card.site_summary ? (
-              <p className="card-prose">{card.site_summary}</p>
+              <RichText text={card.site_summary} className="card-prose" />
             ) : (
-              <p className="muted small">No notes for this site yet.</p>
+              <p className="muted small">No notes for this site yet. An admin adds them under Training sites.</p>
             )}
           </section>
         </div>
@@ -96,6 +141,10 @@ export default function CardPanel({ card }: { card: BoardCard }) {
             />
           </div>
 
+
+          {/* The day's numbers for this card. They roll up to the profile
+              and its assignee on the dashboard. */}
+          <WorkFields subject={{ card_no: card.card_no }} metrics={AI_WORK} />
 
           <div>
             <h3 className="card-section">Created</h3>

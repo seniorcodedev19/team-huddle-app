@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { describeActivity } from "@/lib/activity";
+import { describeActivity, plainActivity } from "@/lib/activity";
 import {
   chime,
   claimAlert,
@@ -19,12 +19,21 @@ import { callJson } from "@/lib/client";
 import type { NotificationFeed, NotificationItem } from "@/lib/types";
 import Avatar from "./Avatar";
 import Switch from "./Switch";
-import TimeAgo from "./TimeAgo";
+import TimeAgo, { ActivityText } from "./TimeAgo";
 
-/* How often the feed is re-read while the tab is visible. This is the whole
-   transport, and it lives only in the provider below: swapping it for a
-   stream later changes this file and nothing that uses the hook. */
+/* Transport. A stream tells the browser the moment something arrives; a
+   poll is the fallback underneath it. Both end in the same read of the feed,
+   and all of it lives in the provider below — nothing that uses the hook
+   knows which one delivered.
+
+   POLL_MS is the pace without a stream. With one open the poll drops back to
+   SAFETY_MS: it is no longer how news arrives, only a guard against a
+   stream that has silently stopped delivering — which is what happens on a
+   host that runs several API instances, where an event raised on one
+   instance never reaches a stream held by another. */
 const POLL_MS = 25_000;
+const SAFETY_MS = 120_000;
+const STREAM_URL = "/api/proxy/notifications/stream";
 
 /** Where the full list lives: the Notification switch of the History page. */
 export const NOTIFICATIONS_HREF = "/admin/history?tab=notifications";
@@ -71,7 +80,7 @@ export function NotificationProvider({ meId, children }: { meId: number; childre
           const d = describeActivity(n, meId);
           showDesktop({
             title: "Team Huddle",
-            body: d.extra ? `${d.text}\n“${d.extra}”` : d.text,
+            body: d.extra ? `${plainActivity(d)}\n“${d.extra}”` : plainActivity(d),
             tag: `huddle-${n.id}`,
             href: d.href,
           });
@@ -82,7 +91,9 @@ export function NotificationProvider({ meId, children }: { meId: number; childre
     /* Polls in a hidden tab too: an alert is exactly for someone who is
        looking elsewhere. Browsers slow a background tab's timers on their
        own, so this does not run at full rate there. */
+    let lastLoad = 0;
     const load = () => {
+      lastLoad = Date.now();
       callJson<NotificationFeed>("GET", "/notifications?limit=30", undefined, ac.signal)
         .then((f) => {
           setFeed(f);
@@ -93,18 +104,55 @@ export function NotificationProvider({ meId, children }: { meId: number; childre
              the badge simply keeps its last known count. */
         });
     };
+    /* The stream is held only while the tab is visible. Browsers allow about
+       six connections per site, and a stream occupies one for as long as it
+       is open: a stream in every background tab would eventually leave none
+       for ordinary requests. A hidden tab falls back to the poll. */
+    let stream: EventSource | null = null;
+    let streamOpen = false;
+    const openStream = () => {
+      if (stream || typeof EventSource === "undefined") return;
+      stream = new EventSource(STREAM_URL);
+      // Also fires after every automatic reconnect: catch up on what was missed.
+      stream.onopen = () => {
+        streamOpen = true;
+        load();
+      };
+      stream.addEventListener("activity", load);
+      // The browser retries by itself; until it succeeds, the poll carries on.
+      stream.onerror = () => {
+        streamOpen = false;
+      };
+    };
+    const closeStream = () => {
+      stream?.close();
+      stream = null;
+      streamOpen = false;
+    };
+
+    const tick = () => {
+      if (streamOpen && Date.now() - lastLoad < SAFETY_MS) return;
+      load();
+    };
     const onVisible = () => {
-      if (!document.hidden) load();
+      if (document.hidden) {
+        closeStream();
+      } else {
+        openStream();
+        load();
+      }
     };
 
     load();
-    const timer = setInterval(load, POLL_MS);
+    if (!document.hidden) openStream();
+    const timer = setInterval(tick, POLL_MS);
     document.addEventListener("visibilitychange", onVisible);
     // Audio stays silent until the page has been interacted with once.
     document.addEventListener("pointerdown", unlockAudio, { once: true });
     document.addEventListener("keydown", unlockAudio, { once: true });
     return () => {
       ac.abort();
+      closeStream();
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
       document.removeEventListener("pointerdown", unlockAudio);
@@ -336,7 +384,9 @@ export function NotificationRow({
     <>
       <Avatar name={n.actor.name ?? "?"} email={n.actor.email ?? ""} src={n.actor.avatar} size={28} />
       <span className="notif-text">
-        <span>{d.text}</span>
+        <span>
+          <ActivityText d={d} />
+        </span>
         {d.extra && <span className="notif-extra muted small">“{d.extra}”</span>}
         <TimeAgo className="muted small" iso={n.at} />
       </span>

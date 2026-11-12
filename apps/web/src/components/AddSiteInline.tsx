@@ -4,6 +4,7 @@ import { useState } from "react";
 import { callJson, useAction } from "@/lib/client";
 import SiteLogo from "./SiteLogo";
 import { Spinner } from "./Icons";
+import RichNoteEditor from "./RichNoteEditor";
 import type { SiteMetaPreview } from "@/lib/types";
 
 /* Any signed-in user can add an AI training site. Paste a URL and the server
@@ -100,13 +101,15 @@ export default function AddSiteInline({ modal = false }: { modal?: boolean }) {
           <div className="addsite-fields">
             <label htmlFor="as-name">Name</label>
             <input id="as-name" value={name} onChange={(e) => setName(e.target.value)} />
-            <label htmlFor="as-summary">Summary</label>
-            <textarea
+            <label htmlFor="as-summary">Site notes</label>
+            {/* Shown, formatted, as "Site notes" on every board card for this site. */}
+            <RichNoteEditor
               id="as-summary"
               value={summary}
-              rows={2}
-              onChange={(e) => setSummary(e.target.value)}
-              placeholder="What this site is"
+              onChange={setSummary}
+              maxLength={4000}
+              rows={3}
+              placeholder="What this site is, and anything everyone working on it should know"
             />
           </div>
         </div>

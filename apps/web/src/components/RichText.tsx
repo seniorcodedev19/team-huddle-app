@@ -1,0 +1,120 @@
+import { Fragment, type ReactNode } from "react";
+
+/* Renders a note written with the rich-note toolbar.
+
+   Notes are stored as plain text with a small markup — **bold**, *italic*,
+   "- " and "1. " lists, [text](url) links, bare URLs — and turned into React
+   elements here. Never into an HTML string: whatever a note contains, it can
+   only ever become these few elements, so a note cannot inject anything into
+   the page. Links are limited to http, https and mailto. */
+export default function RichText({ text, className }: { text: string; className?: string }) {
+  return <div className={`rich-text${className ? ` ${className}` : ""}`}>{blocks(text)}</div>;
+}
+
+/* The note as one plain line, for places with room for a hint, not a note:
+   a table cell, a tooltip. Formatting marks are dropped, links keep their
+   text, and line breaks and list markers become separators. */
+export function plainText(text: string): string {
+  return text
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((l) => l.replace(BULLET, "$1").replace(NUMBERED, "$1").trim())
+    .filter(Boolean)
+    .join(" · ")
+    .replace(/\[([^\]\n]+)\]\([^)\s]+\)/g, "$1")
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+    .replace(/\*([^*\s][^*\n]*)\*/g, "$1");
+}
+
+type Block = { kind: "p"; lines: string[] } | { kind: "ul" | "ol"; items: string[] };
+
+const BULLET = /^\s*[-*]\s+(.*)$/;
+const NUMBERED = /^\s*\d+[.)]\s+(.*)$/;
+
+function blocks(text: string): ReactNode[] {
+  const out: Block[] = [];
+  for (const line of text.replace(/\r\n?/g, "\n").split("\n")) {
+    const b = BULLET.exec(line);
+    const n = b ? null : NUMBERED.exec(line);
+    const last = out[out.length - 1];
+    if (b || n) {
+      const kind = b ? "ul" : "ol";
+      const item = (b ?? n)![1];
+      if (last && last.kind === kind) last.items.push(item);
+      else out.push({ kind, items: [item] });
+    } else if (line.trim() === "") {
+      // A blank line ends the current block; the next text starts a new paragraph.
+      out.push({ kind: "p", lines: [] });
+    } else if (last && last.kind === "p") {
+      last.lines.push(line);
+    } else {
+      out.push({ kind: "p", lines: [line] });
+    }
+  }
+  return out
+    .filter((b) => (b.kind === "p" ? b.lines.length > 0 : true))
+    .map((b, i) =>
+      b.kind === "p" ? (
+        <p key={i}>
+          {b.lines.map((l, j) => (
+            <Fragment key={j}>
+              {j > 0 && <br />}
+              {inline(l)}
+            </Fragment>
+          ))}
+        </p>
+      ) : b.kind === "ul" ? (
+        <ul key={i}>
+          {b.items.map((it, j) => (
+            <li key={j}>{inline(it)}</li>
+          ))}
+        </ul>
+      ) : (
+        <ol key={i}>
+          {b.items.map((it, j) => (
+            <li key={j}>{inline(it)}</li>
+          ))}
+        </ol>
+      ),
+    );
+}
+
+const TOKEN = /(\*\*[^*\n]+\*\*)|(\*[^*\s][^*\n]*\*)|(\[[^\]\n]+\]\([^)\s]+\))|((?:https?:\/\/|mailto:)[^\s<>()]+)/g;
+
+function safeUrl(url: string) {
+  return /^(https?:\/\/|mailto:)/i.test(url) ? url : null;
+}
+
+function inline(line: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  let at = 0;
+  for (const m of line.matchAll(TOKEN)) {
+    const start = m.index ?? 0;
+    if (start > at) out.push(<Fragment key={`t${at}`}>{line.slice(at, start)}</Fragment>);
+    const [tok, bold, italic, link, bare] = m;
+    if (bold) out.push(<strong key={start}>{bold.slice(2, -2)}</strong>);
+    else if (italic) out.push(<em key={start}>{italic.slice(1, -1)}</em>);
+    else if (link) {
+      const [, label, href] = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(link) ?? [];
+      const url = href ? safeUrl(href) : null;
+      out.push(
+        url ? (
+          <a key={start} href={url} target="_blank" rel="noreferrer noopener">
+            {label}
+          </a>
+        ) : (
+          <Fragment key={start}>{tok}</Fragment>
+        ),
+      );
+    } else if (bare) {
+      out.push(
+        <a key={start} href={bare} target="_blank" rel="noreferrer noopener">
+          {bare}
+        </a>,
+      );
+    }
+    at = start + tok.length;
+  }
+  if (at < line.length) out.push(<Fragment key={`t${at}`}>{line.slice(at)}</Fragment>);
+  return out;
+}
