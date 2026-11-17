@@ -14,6 +14,7 @@ const icons = {
   "/calendar": "calendar",
   "/agent": "agent",
   "/profiles": "profiles",
+  "/contacts": "contacts",
   "/ai-training": "training",
   "/profile": "profile",
   "/admin": "admin",

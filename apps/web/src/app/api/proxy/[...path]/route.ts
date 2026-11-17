@@ -33,6 +33,10 @@ async function handler(req: NextRequest, ctx: { params: Promise<{ path: string[]
     headers.set("Cache-Control", "no-cache");
     return new NextResponse(res.body, { status: res.status, headers });
   }
+  /* A file download is passed through byte for byte. Reading it as text
+     would drop a UTF-8 byte-order mark, which is what tells Excel that a CSV
+     is UTF-8 — without it, accented names come out garbled. */
+  if (disposition) return new NextResponse(await res.arrayBuffer(), { status: res.status, headers });
   return new NextResponse(await res.text(), { status: res.status, headers });
 }
 

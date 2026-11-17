@@ -405,6 +405,36 @@ a { color: inherit; }
 
 .profile-modal .modal-head h2 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.015em; }
 
+/* ---------- contacts ---------- */
+
+.contacts-table td { vertical-align: middle; white-space: nowrap; }
+/* The name opens the contact, so it reads as the row's link. */
+.contact-name {
+  padding: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; font-weight: 600; color: var(--ink); text-align: left;
+}
+.contact-name:hover { color: var(--accent); text-decoration: underline; }
+.contact-name:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent-ring); border-radius: 3px; }
+.contacts-table a { color: var(--accent); }
+.contact-links { display: inline-flex; gap: 10px; }
+.contact-actions { display: inline-flex; gap: 6px; }
+.icon-action.danger:hover:not(:disabled) { color: var(--danger); border-color: var(--danger); background: var(--danger-wash); }
+.contacts-pager { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 12px; }
+.contacts-pager > .muted { margin-right: auto; }
+/* Status and assignee are edited in place; compact so the row stays one line. */
+.contacts-table .contact-dd { min-width: 150px; }
+.contacts-table .contact-dd .dd-trigger { padding-top: 5px; padding-bottom: 5px; }
+
+.contact-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; margin-bottom: 12px; }
+.contact-form.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.contact-form input, .contact-form .dd { width: 100%; }
+.contact-modal .modal-head h2 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.015em; }
+/* A form, not a two-column card: narrower than the card modal. */
+.modal.modal-card.contact-modal { max-width: 860px; width: min(860px, calc(100vw - 32px)); }
+@media (max-width: 700px) {
+  .contact-form, .contact-form.three { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* ---------- rich notes ---------- */
 
 /* The toolbar and the text area read as one field: one border around both. */

@@ -452,3 +452,38 @@ export interface WorkRange {
   rows: WorkLog[];
 }
 
+
+/* ---------- contacts (migration 030) ---------- */
+
+export type ContactStatus = "none" | "contacted" | "pending" | "approved" | "rejected";
+
+/** A contact. Every text field is stored encrypted and arrives decrypted. */
+export interface Contact {
+  id: number;
+  name: string;
+  job_title: string;
+  location: string;
+  email: string;
+  phone: string;
+  linkedin_url: string;
+  github_url: string;
+  portfolio_url: string;
+  note: string;
+  status: ContactStatus;
+  assignee_id: number | null;
+  assignee: ProfileAssignee | null;
+  created_at: string;
+  updated_at: string;
+  /** Some field could not be decrypted with the server's current secret. */
+  locked: boolean;
+}
+/** One page of contacts, after the filters. */
+export interface ContactPage {
+  rows: Contact[];
+  /** Contacts matching the filters, across all pages. */
+  total: number;
+  /** Every contact, ignoring the filters. */
+  all: number;
+  page: number;
+  per_page: number;
+}

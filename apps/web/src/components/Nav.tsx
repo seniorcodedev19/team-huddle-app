@@ -14,6 +14,7 @@ export default function Nav({ me }: { me: User }) {
     { href: "/calendar", label: "Calendar" },
     { href: "/agent", label: "Agent" },
     { href: "/profiles", label: "Profiles" },
+    { href: "/contacts", label: "Contacts" },
     { href: "/ai-training", label: "AI Training" },
   ];
   if (me.role === "admin") {

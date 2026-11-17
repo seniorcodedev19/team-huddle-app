@@ -64,6 +64,7 @@ export function Icon({
     | "agent"
     | "metrics"
     | "profiles"
+    | "contacts"
     | "training"
     | "sites"
     | "history";
@@ -163,6 +164,16 @@ export function Icon({
           <circle cx="8.3" cy="10.8" r="2" />
           <path d="M5.3 15.9a3.2 3.2 0 0 1 6 0" />
           <path d="M14.2 10h4.3M14.2 13.6h3.1" />
+        </svg>
+      );
+    // An address book: a bound cover with a person on it and tabs down the spine.
+    case "contacts":
+      return (
+        <svg {...common}>
+          <rect x="5" y="3" width="15" height="18" rx="2.5" />
+          <path d="M3 8h3M3 12h3M3 16h3" />
+          <circle cx="12.5" cy="10" r="2.4" />
+          <path d="M8.8 16.4a3.9 3.9 0 0 1 7.4 0" />
         </svg>
       );
     // A brain with a rising spark: training an AI account.
