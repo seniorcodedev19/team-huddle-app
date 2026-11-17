@@ -98,7 +98,7 @@ export default function WeekGrid({ data }: { data: WeekData }) {
                   <label htmlFor={tracking ? undefined : `m-${m.id}`}>{m.name}</label>
                   <div className="muted" style={{ fontSize: 13 }}>
                     {tracking
-                      ? `Logged on Time tracking · target ${fmt(m.target)} ${m.unit || "hours"}`
+                      ? `Active time from ManicTime · target ${fmt(m.target)} ${m.unit || "hours"}`
                       : m.formula_type === "overtime"
                         ? `Weekly total · target ${fmt(m.target)} ${m.unit || "units"} · extra × overtime bonus`
                         : m.formula_type === "ratio"
@@ -109,11 +109,9 @@ export default function WeekGrid({ data }: { data: WeekData }) {
                 {tracking ? (
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>{fmt(done)}</div>
-                    {data.editable && (
-                      <div>
-                        <Link href="/time">Log time</Link>
-                      </div>
-                    )}
+                    <div>
+                      <Link href="/time">See time</Link>
+                    </div>
                   </div>
                 ) : (
                   <div>

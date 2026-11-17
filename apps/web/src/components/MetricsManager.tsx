@@ -44,7 +44,7 @@ function Row({ m, canEdit }: { m: Metric; canEdit: boolean }) {
       </td>
       <td>
         {isTimeTracking(m) ? (
-          <span className="muted">Time logs (built-in)</span>
+          <span className="muted">ManicTime active time (built-in)</span>
         ) : (
           <Dropdown<FormulaType>
             ariaLabel={`${name || m.name} formula`}

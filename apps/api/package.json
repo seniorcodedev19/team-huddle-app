@@ -8,7 +8,8 @@
     "migrate": "tsx --env-file=.env src/migrate.ts",
     "seed": "tsx --env-file=.env src/seed.ts",
     "encrypt-notes": "tsx --env-file=.env src/encryptNotes.ts",
-    "test": "tsx --test src/scoring.test.ts src/scoring.week.test.ts src/csv.test.ts",
+    "mt:sync": "tsx --env-file=.env src/manictimeSync.ts",
+    "test": "tsx --test src/scoring.test.ts src/scoring.week.test.ts src/csv.test.ts src/manictime.test.ts",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit"
   },

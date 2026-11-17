@@ -26,6 +26,7 @@ export default function Nav({ me }: { me: User }) {
         { href: "/admin/users", label: "Users" },
         { href: "/admin/metrics", label: "Metrics" },
         { href: "/admin/agent", label: "Agent connect" },
+        { href: "/admin/manictime", label: "ManicTime" },
         { href: "/admin/training-sites", label: "Training sites" },
       ],
     });

@@ -21,6 +21,7 @@ const icons = {
   "/admin/users": "team",
   "/admin/metrics": "metrics",
   "/admin/agent": "agent",
+  "/admin/manictime": "time",
   "/admin/training-sites": "sites",
   "/admin/history": "history",
 } as const;

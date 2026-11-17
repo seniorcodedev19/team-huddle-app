@@ -435,6 +435,129 @@ a { color: inherit; }
   .contact-form, .contact-form.three { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* ---------- ManicTime ---------- */
+
+.mt-admin { max-width: 860px; }
+.mt-admin .mt-title { margin: 0 0 4px; font-size: 15px; }
+.mt-admin .mt-help { margin: 0 0 14px; max-width: 70ch; }
+.mt-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+.mt-form .mt-wide { grid-column: 1 / -1; }
+.mt-form input, .mt-form .dd { width: 100%; }
+.mt-ok { color: var(--ok); }
+.mt-summary { margin-top: 14px; font-size: 13.5px; }
+.mt-summary .mt-warning { margin: 10px 0 0; }
+.mt-people .mt-person-dd { min-width: 220px; }
+.mt-people .mt-person-dd .dd-trigger { padding-top: 5px; padding-bottom: 5px; }
+.time-tags .time-auto { margin-left: 8px; vertical-align: 1px; }
+.time-tags td.nowrap, .stack td.nowrap { white-space: nowrap; }
+@media (max-width: 700px) {
+  .mt-form { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Time tracking: the Active time report (tr-) and timelines (tl-), drawn
+   after ManicTime's Team views. Active is --s0 everywhere, Away --s4. */
+.tr-note { margin: -6px 0 12px; max-width: 80ch; }
+.tr-tiles { margin-bottom: 0; }
+.tile-body:has(.tile-meter) { flex: 1; }
+.tile-meter {
+  display: block;
+  height: 6px;
+  margin-top: 7px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--tile-ink, var(--accent)) 16%, transparent);
+  overflow: hidden;
+}
+.tile-meter span { display: block; height: 100%; border-radius: 99px; background: var(--tile-ink, var(--accent)); }
+.tr-title { margin: 0 0 10px; font-size: 14px; }
+.tr-chart { height: 240px; }
+.tr-tip {
+  display: grid;
+  gap: 1px;
+  padding: 7px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  box-shadow: 0 4px 14px var(--raise);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.tr-tip strong { color: var(--ink); font-size: 14px; }
+.tr-table td.n, .tr-table th.n { white-space: nowrap; }
+.tr-share { display: inline-flex; align-items: center; gap: 8px; }
+.tr-meter { width: 90px; height: 8px; border-radius: 99px; background: var(--accent-wash); overflow: hidden; }
+.tr-meter span { display: block; height: 100%; border-radius: 99px; background: var(--s0); }
+.tr-share-n { min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; }
+
+.tl-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.tl-days { display: flex; gap: 6px; overflow-x: auto; max-width: 100%; padding-bottom: 2px; }
+.tl-day {
+  display: grid;
+  justify-items: center;
+  min-width: 58px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-decoration: none;
+}
+.tl-day small { font-weight: 500; color: var(--muted); font-size: 11.5px; }
+.tl-day:hover { border-color: var(--line-strong); }
+.tl-day.quiet { color: var(--muted); }
+.tl-day.on { border-color: var(--accent); background: var(--accent-wash); color: var(--accent); }
+.tl-day.on small { color: var(--accent); }
+.tl-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--muted); }
+.tl-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.tl-key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+
+.tl-person { padding-top: 14px; padding-bottom: 14px; }
+.tl-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 8px; }
+.tl-group { margin-top: 8px; }
+.tl-group-name { margin: 0 0 4px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+/* Every lane shares the label column and the right gutter, so their axes line up. */
+.tl-lane { display: grid; grid-template-columns: 116px minmax(0, 1fr); align-items: center; gap: 10px; padding-right: 22px; }
+.tl-lane + .tl-lane { margin-top: 4px; }
+.tl-label { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tl-track {
+  --tl-bg: var(--canvas);
+  position: relative;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--tl-bg);
+}
+.tl-axis .tl-track { height: 16px; background: none; }
+.tl-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.tl-grid { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); }
+.tl-seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 2px;
+  border-radius: 2px;
+  /* the surface gap between touching stretches */
+  box-shadow: 1px 0 0 var(--tl-bg), -1px 0 0 var(--tl-bg);
+}
+.tl-seg:hover { filter: brightness(1.12); z-index: 1; }
+.tl-active { background: var(--s0); }
+.tl-away { background: var(--s4); }
+.tl-tag { background: var(--s2); }
+.tl-autotag { background: var(--s3); }
+@media (max-width: 700px) {
+  .tl-lane { grid-template-columns: 78px minmax(0, 1fr); gap: 8px; padding-right: 16px; }
+  .tr-meter { width: 56px; }
+}
+
 /* ---------- rich notes ---------- */
 
 /* The toolbar and the text area read as one field: one border around both. */

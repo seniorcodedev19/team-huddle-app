@@ -128,7 +128,7 @@ async function runTool(user: User, name: string, raw: string): Promise<string> {
     if (report && (report.status === "submitted" || report.status === "approved")) {
       return JSON.stringify({ error: `Week is ${report.status}, entries are locked` });
     }
-    if (isTimeTracking(metric)) return JSON.stringify({ error: "Time tracking is logged on the Time tab, not as a daily number" });
+    if (isTimeTracking(metric)) return JSON.stringify({ error: "Time tracking comes from ManicTime active time and can't be entered by hand" });
     if (value <= 0) {
       await pool.query("delete from daily_entries where user_id=$1 and metric_id=$2 and entry_date=$3", [user.id, metricId, entryDate]);
     } else {

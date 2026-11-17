@@ -66,15 +66,16 @@ export async function dailyMap(userId: number, days: string[]): Promise<DailyMap
 
 const dayKey = (v: string | Date) => (v instanceof Date ? isoDate(v) : String(v).slice(0, 10));
 
+/* Tracked hours per day: ManicTime active time, nothing else. Time logged by
+   hand before ManicTime (time_logs) is no longer read; weeks scored from it
+   were approved, and approved weeks keep their stored score. */
 export async function timeHoursByDay(userId: number, days: string[]): Promise<number[]> {
-  const { rows } = await pool.query<{ log_date: string | Date; minutes: number }>(
-    `select log_date, sum(minutes)::int as minutes
-     from time_logs where user_id=$1 and log_date between $2 and $3
-     group by log_date`,
+  const { rows } = await pool.query<{ log_date: string | Date; active_minutes: number }>(
+    "select log_date, active_minutes from manictime_days where user_id=$1 and log_date between $2 and $3",
     [userId, days[0], days[6]],
   );
   const by: Record<string, number> = {};
-  for (const r of rows) by[dayKey(r.log_date)] = Number(r.minutes);
+  for (const r of rows) by[dayKey(r.log_date)] = Number(r.active_minutes);
   return days.map((d) => Math.round(((by[d] ?? 0) / 60) * 100) / 100);
 }
 

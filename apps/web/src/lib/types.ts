@@ -145,28 +145,95 @@ export interface HistoryPoint {
   achievement_pct: number | null;
   status: Status;
 }
-export interface TimeLog {
-  id: number;
+/** Time under one ManicTime tag on one day. auto: from ManicTime's AutoTags. */
+export interface TimeTag {
   log_date: string;
+  tag: string;
+  auto: boolean;
   minutes: number;
-  task: string;
-  note: string | null;
-}
-export interface TimeTeamWeek {
-  week_start: string;
-  week_end: string;
-  today: string;
-  days: string[];
-  rows: { user_id: number; name: string; email: string; avatar?: string | null; minutes: number; by_day: number[] }[];
+  notes: string | null;
 }
 export interface TimeWeek {
   week_start: string;
   week_end: string;
   today: string;
   days: string[];
-  logs: TimeLog[];
+  /** ManicTime active minutes per day. */
   by_day: number[];
   total_minutes: number;
+  tags: TimeTag[];
+  manictime: { configured: boolean; linked: boolean; synced_at: string | null };
+}
+
+/** One person's week in the Active time report. Seconds; averages are per day they were active. */
+export interface TimeReportPerson {
+  user_id: number;
+  name: string;
+  email: string;
+  avatar?: string | null;
+  linked: boolean;
+  /** Days with any active time. */
+  days: number;
+  active_sec: number;
+  /** Time between the day's first and last activity that wasn't active. */
+  away_sec: number;
+  interruptions: number;
+}
+/** A stretch on one day's timeline, in seconds from the person's local midnight. */
+export interface TimelineSpan {
+  /** Computer name; "" for tags. */
+  device: string;
+  kind: "active" | "away" | "tag" | "autotag";
+  label: string;
+  start: number;
+  end: number;
+}
+export interface TimeReport {
+  week_start: string;
+  week_end: string;
+  today: string;
+  days: string[];
+  /** The day the timelines show. */
+  day: string;
+  active_days: string[];
+  people: TimeReportPerson[];
+  /** People active at each 15 minutes of the day (96 slots), averaged per person over their active days. */
+  by_time: number[];
+  timeline: { user_id: number; name: string; spans: TimelineSpan[] }[];
+  manictime: { configured: boolean; synced_at: string | null };
+}
+
+export interface ManicTimeSyncSummary {
+  from: string;
+  to: string;
+  people: number;
+  linked: number;
+  days: number;
+  tags: number;
+  locked: number;
+  timelines: { usage: number; tags: number; autotags: number };
+  warnings: string[];
+}
+export interface ManicTimePerson {
+  mt_username: string;
+  display_name: string;
+  devices: number;
+  seen_at: string;
+  user_id: number | null;
+  user_name: string | null;
+}
+/** Admin → ManicTime. The secret itself is never sent, only whether one is saved. */
+export interface ManicTimeAdmin {
+  configured: boolean;
+  server_url: string;
+  auth_mode: "token" | "password";
+  username: string;
+  has_secret: boolean;
+  synced_at: string | null;
+  sync_error: string | null;
+  sync_summary: ManicTimeSyncSummary | null;
+  people: ManicTimePerson[];
+  users: { id: number; name: string; email: string }[];
 }
 /** What a calendar event is. Future metrics group on this. */
 export type InterviewKind = "interview" | "ai_interview" | "event";

@@ -176,8 +176,8 @@ export default async function Landing() {
       <section className="steps" id="features">
         <div>
           <div className="n">1</div>
-          <h3>Log time and weekly results</h3>
-          <p>Hours come from Time tracking. Other metrics are one total for the week.</p>
+          <h3>Track time and weekly results</h3>
+          <p>Hours come from ManicTime. Other metrics are one total for the week.</p>
         </div>
         <div>
           <div className="n">2</div>

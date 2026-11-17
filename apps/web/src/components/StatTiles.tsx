@@ -3,7 +3,9 @@ import type { Status, WeekData } from "@/lib/types";
 
 type Tone = "accent" | "ok" | "warn" | "danger" | "violet";
 
-function TileIcon({ name }: { name: "points" | "target" | "clock" | "check" }) {
+type IconName = "points" | "target" | "clock" | "check" | "pause" | "split";
+
+function TileIcon({ name }: { name: IconName }) {
   const common = {
     width: 20,
     height: 20,
@@ -42,21 +44,37 @@ function TileIcon({ name }: { name: "points" | "target" | "clock" | "check" }) {
           <path d="M20 6.5 9.5 17 4 11.5" />
         </svg>
       );
+    case "pause":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M10 9v6M14 9v6" />
+        </svg>
+      );
+    case "split":
+      return (
+        <svg {...common}>
+          <path d="M3 12h5M16 12h5M10.5 8l3 8" />
+        </svg>
+      );
   }
 }
 
-function Tile({
+export function Tile({
   label,
   value,
   sub,
   tone = "accent",
   icon,
+  meter,
 }: {
   label: string;
   value: ReactNode;
   sub?: string;
   tone?: Tone;
-  icon: "points" | "target" | "clock" | "check";
+  icon: IconName;
+  /** 0–100: draws a meter under the value. */
+  meter?: number;
 }) {
   return (
     <div className="tile">
@@ -69,6 +87,11 @@ function Tile({
           {value}
           {sub ? <span className="tile-sub">{sub}</span> : null}
         </span>
+        {meter !== undefined && (
+          <span className="tile-meter" aria-hidden>
+            <span style={{ width: `${Math.max(0, Math.min(100, meter))}%` }} />
+          </span>
+        )}
       </div>
     </div>
   );

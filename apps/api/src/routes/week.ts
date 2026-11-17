@@ -121,7 +121,7 @@ week.put("/daily", h(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// One weekly total per metric (not overtime — those hours come from time_logs).
+// One weekly total per metric (not Time Tracking — those hours come from ManicTime).
 week.put("/weekly", h(async (req, res) => {
   const actor = req.user!;
   const b = z
