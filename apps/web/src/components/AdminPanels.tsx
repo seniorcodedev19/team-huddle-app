@@ -25,6 +25,11 @@ function UserRow({ me, u, teams }: { me: User; u: User; teams: Team[] }) {
             <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
               {u.email}
             </div>
+            {!u.active && (
+              <span className={`chip ${u.pending ? "status-warn" : "status-muted"}`} style={{ marginTop: 6 }}>
+                {u.pending ? "Waiting for approval" : "Deactivated"}
+              </span>
+            )}
           </div>
         </div>
       </td>
@@ -80,7 +85,7 @@ function UserRow({ me, u, teams }: { me: User; u: User; teams: Team[] }) {
             </button>
           ) : (
             <button className="btn" type="button" disabled={busy} onClick={() => run("PATCH", `/users/${u.id}`, { active: true })}>
-              Approve
+              {u.pending ? "Approve" : "Reactivate"}
             </button>
           )}
         </div>
@@ -91,12 +96,22 @@ function UserRow({ me, u, teams }: { me: User; u: User; teams: Team[] }) {
 }
 
 function Users({ me, users, teams }: { me: User; users: User[]; teams: Team[] }) {
+  /* New sign-ups can do nothing until approved, so they go to the top where
+     they are seen. The sort is stable: everyone else keeps the order sent. */
+  const waiting = users.filter((u) => u.pending).length;
+  const listed = [...users].sort((a, b) => Number(Boolean(b.pending)) - Number(Boolean(a.pending)));
   return (
     <section>
       <h2>People</h2>
       <p className="sub" style={{ marginTop: -4 }}>
         Update name, title, role, and team. Email stays as their sign-in.
       </p>
+      {waiting > 0 && (
+        <div className="banner note" role="status">
+          {waiting === 1 ? "1 person is" : `${waiting} people are`} waiting for approval. Approve only people you
+          know: once approved, they can see the whole team&apos;s data.
+        </div>
+      )}
       <div className="panel tablewrap">
         <table>
           <thead>
@@ -110,7 +125,7 @@ function Users({ me, users, teams }: { me: User; users: User[]; teams: Team[] })
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
+            {listed.map((u) => (
               <UserRow key={`${u.id}-${u.name}-${u.email}-${u.job_title}-${u.role}-${u.team_id}-${u.active}-${u.is_bidder}`} me={me} u={u} teams={teams} />
             ))}
           </tbody>

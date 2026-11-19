@@ -1,0 +1,144 @@
+/* The connect screen. Its colours follow the web app's light and dark themes
+   so the first thing someone sees already looks like the app behind it. */
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --ink: #171a21;
+  --muted: #5d6676;
+  --line: #dfe3ea;
+  --accent: #2563eb;
+  --accent-ink: #ffffff;
+  --danger: #b42318;
+  --danger-bg: #fdecea;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1218;
+    --surface: #171b23;
+    --ink: #eceff4;
+    --muted: #9aa4b5;
+    --line: #2a303b;
+    --accent: #5b8def;
+    --accent-ink: #0b1020;
+    --danger: #ff9b8f;
+    --danger-bg: #3a1c1a;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+.card {
+  width: min(440px, 100%);
+  padding: 32px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+.logo {
+  display: block;
+  border-radius: 13px;
+  margin-bottom: 18px;
+}
+h1 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+p {
+  margin: 0 0 16px;
+}
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: 13px;
+  margin: 20px 0 0;
+}
+
+form {
+  margin-top: 4px;
+}
+label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+input {
+  width: 100%;
+  padding: 10px 12px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  outline: none;
+}
+input:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+.btn {
+  padding: 9px 16px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.btn.secondary {
+  color: var(--ink);
+  background: transparent;
+  border-color: var(--line);
+}
+.btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.btn:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  outline-offset: 2px;
+}
+
+.banner,
+.error {
+  color: var(--danger);
+}
+.banner {
+  padding: 10px 12px;
+  background: var(--danger-bg);
+  border-radius: 10px;
+}
+.error {
+  margin: 8px 0 0;
+  font-size: 14px;
+}
+[hidden] {
+  display: none !important;
+}

@@ -1,0 +1,66 @@
+{
+  "name": "team-huddle-desktop",
+  "productName": "Team Huddle",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Team Huddle for the desktop: the web app in its own window, with a tray icon, native notifications and submit reminders.",
+  "author": "Team Huddle",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "npm run build && node scripts/electron.js .",
+    "test": "npm run build && node --test \"dist/**/*.test.js\"",
+    "e2e": "npm run build && node e2e/run.mjs",
+    "icons": "node scripts/electron.js scripts/make-icons.js",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "huddle": {
+    "defaultServerUrl": ""
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0",
+    "playwright-core": "^1.65.1",
+    "typescript": "^5.7.2"
+  },
+  "build": {
+    "appId": "app.teamhuddle.desktop",
+    "productName": "Team Huddle",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*.js",
+      "!dist/**/*.test.js",
+      "static/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "Team Huddle"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office",
+      "icon": "build/icon.png"
+    }
+  }
+}

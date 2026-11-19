@@ -18,6 +18,13 @@ import { errorHandler } from "./util";
 
 const app = express();
 
+// Says less about what runs here, and stops a browser guessing a response's type.
+app.disable("x-powered-by");
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  next();
+});
+
 app.use(
   express.json({
     limit: "400kb",
@@ -26,7 +33,10 @@ app.use(
     },
   }),
 );
-app.use(cors({ origin: process.env.WEB_ORIGIN, credentials: true }));
+/* Browsers reach this API through the web app's proxy, never directly, so no
+   other origin needs to be allowed. Without WEB_ORIGIN the cors package would
+   answer every origin with "*"; `false` sends no CORS headers at all. */
+app.use(cors({ origin: process.env.WEB_ORIGIN || false, credentials: true }));
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });

@@ -5,7 +5,7 @@ import type { Role, User } from "./types";
 
 const secret = () => new TextEncoder().encode(process.env.API_JWT_SECRET ?? "");
 
-const adminEmails = () =>
+export const adminEmails = () =>
   (process.env.ADMIN_EMAILS ?? "")
     .toLowerCase()
     .split(",")
@@ -26,16 +26,24 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     const name = String(payload.name ?? "");
     const isAdmin = adminEmails().includes(email);
 
+    /* A first sign-in creates the row, inactive: a new account can do nothing
+       until an admin approves it on Admin > Users, the same rule /auth/signup
+       applies. An address listed in ADMIN_EMAILS is the exception, which is
+       how the first admin gets in. An existing row keeps the state it has. */
     const { rows } = await pool.query<User>(
-      `insert into users (email, name, role, team_id)
-       values ($1, $2, $3, (select id from teams order by id limit 1))
+      `insert into users (email, name, role, team_id, active)
+       values ($1, $2, $3, (select id from teams order by id limit 1), $4)
        on conflict (email) do update set
          role = case when $4::boolean then 'admin' else users.role end
        returning id, email, name, role, team_id, active, avatar`,
       [email, name, isAdmin ? "admin" : "member", isAdmin],
     );
     const user = rows[0];
-    if (!user.active) return res.status(403).json({ error: "Account is deactivated" });
+    if (!user.active) {
+      return res
+        .status(403)
+        .json({ error: "This account isn't active yet. An admin needs to approve it.", code: "inactive" });
+    }
     req.user = user;
     next();
   } catch {

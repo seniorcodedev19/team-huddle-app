@@ -73,6 +73,9 @@ export function describeActivity(n: ActivityLike, meId?: number): Described {
       href: "/profiles",
     };
   }
+  if (n.entity === "user" && n.action === "signup") {
+    return { text: `${who} signed up and is waiting for approval`, href: "/admin/users" };
+  }
   if (n.entity === "comment") {
     if (n.action === "update") return { text: `${who} edited a comment on ${key}`, href };
     if (n.action === "delete") return { text: `${who} deleted a comment on ${key}`, href };

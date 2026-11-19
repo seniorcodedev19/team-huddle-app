@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- This page runs nothing but its own two files. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'"
+    />
+    <title>Team Huddle</title>
+    <link rel="stylesheet" href="connect.css" />
+  </head>
+  <body>
+    <main class="card" aria-live="polite">
+      <img class="logo" src="icon.png" width="56" height="56" alt="" />
+      <h1 id="title">Connect to Team Huddle</h1>
+      <p id="lead" class="muted">Enter the address of your team's Team Huddle server. You only do this once.</p>
+
+      <p id="problem" class="banner" hidden></p>
+
+      <div id="retry-row" class="row" hidden>
+        <button id="retry" class="btn" type="button">Try again</button>
+        <button id="other" class="btn secondary" type="button">Use a different address</button>
+      </div>
+
+      <form id="form" novalidate>
+        <label for="address">Server address</label>
+        <input
+          id="address"
+          name="address"
+          type="text"
+          inputmode="url"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          placeholder="https://huddle.yourcompany.com"
+        />
+        <p id="error" class="error" role="alert" hidden></p>
+        <div class="row">
+          <button id="go" class="btn" type="submit">Connect</button>
+          <button id="cancel" class="btn secondary" type="button" hidden>Cancel</button>
+        </div>
+      </form>
+
+      <p id="foot" class="muted small"></p>
+    </main>
+    <script src="connect.js"></script>
+  </body>
+</html>

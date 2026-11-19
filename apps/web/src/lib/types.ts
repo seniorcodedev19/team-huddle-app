@@ -13,6 +13,8 @@ export interface User {
   avatar?: string | null;
   /** Bidders are assignable to profiles but excluded from weekly metrics. */
   is_bidder?: boolean;
+  /** Inactive because the sign-up has not been approved yet, not because an admin switched it off. From GET /users. */
+  pending?: boolean;
 }
 export interface Team {
   id: number;
@@ -281,6 +283,8 @@ export interface Profile {
   job_title: string;
   bio: string;
   avatar: string | null;
+  /** False for an account that only ever signs in with Google. */
+  has_password: boolean;
 }
 export interface AuditRow {
   id: number;

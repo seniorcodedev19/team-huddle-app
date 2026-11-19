@@ -12,7 +12,10 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
   return (
     <AuthShell active="signup">
       <h1 className="auth-title">Create your account</h1>
-      <p className="auth-sub">Sign up with your work email. An admin assigns your team after you join.</p>
+      <p className="auth-sub">
+        Sign up with your work email. An admin approves new accounts, so you can sign in once yours has been
+        approved.
+      </p>
 
       {sp.error && (
         <div className="banner error" role="alert">
@@ -26,8 +29,10 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
           const email = String(formData.get("email") ?? "").trim();
           const password = String(formData.get("password") ?? "");
           const name = String(formData.get("name") ?? "").trim();
-          const error = await createAccount(email, password, name);
-          if (error) redirect(`/signup?error=${encodeURIComponent(error)}`);
+          const made = await createAccount(email, password, name);
+          if ("error" in made) redirect(`/signup?error=${encodeURIComponent(made.error)}`);
+          // Signing in now would be refused: the account waits for an admin.
+          if (!made.active) redirect("/login?notice=pending");
           await signInWithPassword(email, password);
         }}
       >

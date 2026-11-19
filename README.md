@@ -10,6 +10,7 @@ is tracking.
 ```
 apps/web    Next.js 15 (App Router) · React 19 · Auth.js v5 · Recharts
 apps/api    Express 4 · node-postgres · Zod · JWT · scoring · audit log
+desktop     Electron shell around the web app: tray, notifications, submit reminders
 ```
 
 ---
@@ -156,7 +157,8 @@ Then open **http://localhost:3000**.
 | `npm run build` | API lint, then the web production build |
 | `npm run db:up` | Start local Postgres via Docker Compose |
 | `npm run db:migrate` | Apply pending migrations |
-| `npm run db:seed` | Seed a team, metrics and an admin |
+| `npm run db:seed` | Seed a team, metrics and the first admin (email from `ADMIN_EMAILS`) |
+| `npm run db:rekey` | Report stored values not under the current encryption secret; `-- --write` re-encrypts them |
 
 `npm run build` is the closest thing to a CI gate — run it, plus `npm test`, before calling a change
 done.
@@ -169,9 +171,21 @@ Two ways in, both configured in `apps/web/.env.local`:
 - **Google** — Google Cloud Console → Credentials → OAuth client (Web), redirect URI
   `http://localhost:3000/api/auth/callback/google`.
 
-Set `ALLOWED_EMAIL_DOMAIN` to restrict sign-in to one domain, or leave it empty to allow any account.
-New people start as members with no team; an admin assigns the team and role. Any address listed in
-`ADMIN_EMAILS` is promoted to admin on sign-in.
+Set `ALLOWED_EMAIL_DOMAIN` to restrict Google sign-in to one domain, or leave it empty to allow any
+Google account.
+
+**A new account cannot sign in until an admin approves it** on Admin → Users, whichever way it was
+created. Admins get a notification when someone signs up. Any address listed in `ADMIN_EMAILS` is
+promoted to admin on sign-in.
+
+`npm run db:seed` creates the first admin from `ADMIN_EMAILS`. It prints a random password once, or
+uses `SEED_ADMIN_PASSWORD` if you set one, and it never changes the password of an admin that already
+exists unless `SEED_ADMIN_PASSWORD` is set. That makes it the way back in for an admin who has lost
+their password; there is no email service, so there is no reset link.
+
+Passwords need 8 or more characters, can't be one of the common ones, and can't contain your own name
+or email. Change yours on **My profile → Password**. Wrong passwords are limited to 5 per email and
+address in 15 minutes, and new accounts to 10 per address per hour.
 
 ### Hosted Postgres (Supabase)
 
@@ -244,18 +258,48 @@ Two Vercel projects from the same repo:
 | web | `apps/web` |
 | api | `apps/api` — zero-config Express, entry `src/index.ts` |
 
-Run `npm run db:migrate` once against the production database before the first deploy.
+Run `npm run db:migrate` against the production database before the first deploy, and again whenever
+a release adds migrations.
+
+Deploy the two projects together. The API accepts sign-ups and sign-ins only from the web app, which
+proves itself with a token signed by `API_JWT_SECRET`; an API that is ahead of its web app refuses
+password sign-ins until the web app catches up.
 
 **Web env:** `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `API_URL` (the api project's URL),
 `API_JWT_SECRET`, optional `ALLOWED_EMAIL_DOMAIN`.
 
-**API env:** `DATABASE_URL`, `DIRECT_URL`, `API_JWT_SECRET`, `ADMIN_EMAILS`, optional `OPENAI_API_KEY`.
-Agent encryption uses `AGENT_TOKEN_SECRET` if set, otherwise `API_JWT_SECRET`.
+**API env:** `DATABASE_URL`, `DIRECT_URL`, `API_JWT_SECRET`, `ADMIN_EMAILS`, `AGENT_TOKEN_SECRET`,
+optional `OPENAI_API_KEY`.
 
 Add `https://<your-web-domain>/api/auth/callback/google` to the Google OAuth redirect URIs.
 
-> **Rotating `AGENT_TOKEN_SECRET` makes every stored agent token undecryptable.** There is no
-> re-encryption path — stored keys and tokens have to be entered again.
+> **`AGENT_TOKEN_SECRET` encrypts what is stored encrypted:** Slack, OpenAI and ManicTime secrets,
+> contacts, and profile notes. Without it the API encrypts under `API_JWT_SECRET` instead. Every
+> deployment that shares a database needs the same value, or one cannot read what another wrote.
+>
+> To change it, move the old value into `AGENT_TOKEN_SECRET_OLD` (still used to read, never to write),
+> set the new one, and run `npm run db:rekey -- --write`. Drop the old value once `npm run db:rekey`
+> reports nothing left under it. Values written under `API_JWT_SECRET` stay readable the same way.
+
+---
+
+## Desktop app
+
+`desktop/` is Team Huddle in its own window for Windows (MVP). It shows the web app from your server,
+so it has every feature of the web app and nothing to keep in step, and adds what a browser tab
+cannot do: a tray icon, system notifications with nothing open, an unread badge on the taskbar, and
+reminders to submit the week.
+
+```bash
+cd desktop
+npm install
+npm start          # asks for the server address on first run
+npm run dist       # Windows installer in desktop/release/
+```
+
+It is not an npm workspace on purpose, so Electron is never installed by the web or API builds. It
+holds no secret: it signs in like a browser and calls the same `/api/proxy` routes the pages do.
+Details, the security model and known gaps are in [desktop/README.md](desktop/README.md).
 
 ---
 
@@ -264,10 +308,14 @@ Add `https://<your-web-domain>/api/auth/callback/google` to the Google OAuth red
 Honest about where the MVP stands. These are documented, not fixed.
 
 **Before any real deployment**
-- `apps/api/src/seed.ts` hardcodes an admin address with the password `"admin"`, and the same address is
-  the default `ADMIN_EMAILS`. **Seeding a reachable deployment creates a known-password admin.** Change
-  both first.
-- There is no rate limiting or account lockout anywhere, including on password login.
+- A database seeded before the seed script stopped hardcoding credentials still has an admin whose
+  password is `"admin"`. **Change it on My profile → Password before anything else.**
+- There is no email service: no email verification and no "forgot password" link. An admin's approval
+  stands in for the first; an admin cannot yet reset someone else's password.
+- Sign-in has no second factor, sessions last 30 days, and changing a password does not end sessions
+  that are already open.
+- Profiles (names, emails, phones), comments and agent chats are stored as plain text. Contacts,
+  profile notes and stored secrets are encrypted.
 
 **Scale**
 - The team, review-queue and history endpoints read one week at a time in a loop — four queries per

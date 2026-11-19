@@ -7,7 +7,11 @@ import { signInWithPassword } from "@/lib/account";
 
 const googleReady = Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET);
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; notice?: string }>;
+}) {
   const sp = await searchParams;
   // The API rejected this session's token. The browser cookie may still look
   // valid, so skip the usual bounce to the dashboard — it would loop.
@@ -15,6 +19,10 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   if (!expired && (await auth())?.user) redirect("/dashboard");
   const badCreds = sp.error === "CredentialsSignin";
   const signInFailed = sp.error === "SignInFailed" || sp.error === "CallbackRouteError";
+  const inactive = sp.error === "AccountInactive";
+  const throttled = sp.error === "TooManyAttempts";
+  // Arriving from /signup: the account exists, and waits for an admin.
+  const created = sp.notice === "pending";
 
   return (
     <AuthShell active="login">
@@ -37,7 +45,22 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           details weren&apos;t checked. Try again in a moment.
         </div>
       )}
-      {sp.error && !badCreds && !signInFailed && !expired && (
+      {created && !sp.error && (
+        <div className="banner note" role="status">
+          Your account has been created. An admin needs to approve it before you can sign in.
+        </div>
+      )}
+      {inactive && (
+        <div className="banner error" role="alert">
+          This account isn&apos;t active yet. An admin needs to approve it before you can sign in.
+        </div>
+      )}
+      {throttled && (
+        <div className="banner error" role="alert">
+          Too many sign-in attempts. Wait 15 minutes and try again.
+        </div>
+      )}
+      {sp.error && !badCreds && !signInFailed && !expired && !inactive && !throttled && (
         <div className="banner error" role="alert">
           Sign-in was refused. Use an account from your company domain.
         </div>
